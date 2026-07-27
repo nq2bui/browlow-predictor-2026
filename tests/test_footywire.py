@@ -4,6 +4,13 @@ from brownlow.footywire import parse_advanced_stats_page, list_season_match_ids
 
 ADV_FIXTURE = Path("tests/fixtures/footywire_advanced_sample.html").read_text()
 MATCH_LIST_FIXTURE = Path("tests/fixtures/footywire_match_list_sample.html").read_text()
+# The base match-list fixture plus two real "noise" rows (Change Password /
+# Update Settings account widgets) extracted from a real captured live page
+# (.superpowers/sdd/debug_real_footywire_matchlist_2025.html). These reuse the
+# darkcolor/lightcolor classes but have a single colspan cell, not match cells.
+MATCH_LIST_WITH_NOISE_FIXTURE = Path(
+    "tests/fixtures/footywire_match_list_with_noise_sample.html"
+).read_text()
 
 
 def test_parse_advanced_stats_page():
@@ -25,6 +32,19 @@ def test_parse_advanced_stats_page():
 
 def test_list_season_match_ids():
     matches = list_season_match_ids(MATCH_LIST_FIXTURE)
+    assert matches == [
+        {"mid": 10751, "home_team": "Richmond", "away_team": "Carlton"},
+        {"mid": 10752, "home_team": "Collingwood", "away_team": "Sydney"},
+    ]
+
+
+def test_list_season_match_ids_skips_non_match_noise_rows():
+    # Real footywire pages carry account-settings widgets ("Change Password" /
+    # "Update Settings") that reuse the darkcolor/lightcolor classes but have a
+    # single colspan cell, not the 4 cells a real match row has. The parser
+    # must skip them (previously raised IndexError on tds[1]) and return only
+    # the genuine matches -- identical to the noise-free fixture's output.
+    matches = list_season_match_ids(MATCH_LIST_WITH_NOISE_FIXTURE)
     assert matches == [
         {"mid": 10751, "home_team": "Richmond", "away_team": "Carlton"},
         {"mid": 10752, "home_team": "Collingwood", "away_team": "Sydney"},

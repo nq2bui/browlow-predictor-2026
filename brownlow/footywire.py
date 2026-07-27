@@ -45,6 +45,14 @@ def list_season_match_ids(match_list_html: str) -> list[dict]:
     matches = []
     for tr in soup.find_all("tr", class_=["darkcolor", "lightcolor"]):
         tds = tr.find_all("td")
+        # Real footywire match-list pages reuse the darkcolor/lightcolor classes
+        # on unrelated account-settings widgets ("Change Password"/"Update
+        # Settings"), which have a single colspan cell rather than the date,
+        # team-links, venue and result cells a genuine match row has. Skip any
+        # row that lacks the cells this function needs (previously raised
+        # IndexError on tds[1]/tds[3]).
+        if len(tds) < 4:
+            continue
         team_links = tds[1].find_all("a")
         if len(team_links) != 2:
             continue
