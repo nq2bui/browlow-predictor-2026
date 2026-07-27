@@ -55,10 +55,18 @@ def parse_match_page(html: str) -> list[dict]:
     rows = []
     for table in soup.find_all("table", class_="sortable"):
         header_th = next(
-            th
-            for th in table.find_all("th")
-            if "Match Statistics" in th.get_text()
+            (
+                th
+                for th in table.find_all("th")
+                if "Match Statistics" in th.get_text()
+            ),
+            None,
         )
+        # Real afltables match pages also contain "Player Details" sortable
+        # tables (career-bio columns), which have no "Match Statistics" header.
+        # Skip any sortable table that isn't a Match Statistics table.
+        if header_th is None:
+            continue
         team_name = header_th.get_text(strip=True).split(" Match Statistics")[0]
         header_row = next(
             tr

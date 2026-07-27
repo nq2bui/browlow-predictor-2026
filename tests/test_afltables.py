@@ -10,6 +10,13 @@ FIXTURE = Path("tests/fixtures/afltables_match_sample.html").read_text()
 SEASON_INDEX_FIXTURE = Path(
     "tests/fixtures/afltables_season_index_sample.html"
 ).read_text()
+# Built programmatically from a real captured live match page (Adelaide v
+# Hawthorn, round 22 2025) which contains FOUR sortable tables: two "Match
+# Statistics" tables and two "Player Details" tables. See
+# .superpowers/sdd/debug_real_2025_match.html.
+MATCH_WITH_PLAYER_DETAILS_FIXTURE = Path(
+    "tests/fixtures/afltables_match_with_player_details_sample.html"
+).read_text()
 
 
 def test_parse_match_header():
@@ -86,6 +93,37 @@ def test_parse_match_page_handles_non_25_colspan():
     assert row["disposals"] == 20
     assert row["goals"] == 2
     assert row["brownlow_votes"] == 3
+
+
+def test_parse_match_page_skips_player_details_table():
+    # Real live afltables match pages carry "Player Details" sortable tables
+    # (career-bio columns) alongside the "Match Statistics" tables. Those have
+    # no "Match Statistics" header th; the parser must skip them rather than
+    # crash (previously raised StopIteration) or emit spurious rows.
+    rows = parse_match_page(MATCH_WITH_PLAYER_DETAILS_FIXTURE)
+
+    # Only the Match Statistics table contributes rows; the Player Details
+    # table (which has real rows in the fixture) contributes zero.
+    assert len(rows) == 3
+    assert all(row["team"] == "Adelaide" for row in rows)
+    players = {row["player"] for row in rows}
+    assert players == {"Berry, Sam", "Bond, Hugh", "Cook, Brayden"}
+
+    # Real stat values come from the Match Statistics table, not the bio table.
+    berry = next(r for r in rows if r["player"] == "Berry, Sam")
+    assert berry["kicks"] == 9
+    assert berry["handballs"] == 4
+    assert berry["disposals"] == 13
+    assert berry["marks"] == 1
+    assert berry["tackles"] == 9
+    assert berry["clearances"] == 2
+    assert berry["contested_possessions"] == 5
+    assert berry["brownlow_votes"] == 0
+
+    bond = next(r for r in rows if r["player"] == "Bond, Hugh")
+    assert bond["kicks"] == 3
+    assert bond["handballs"] == 11
+    assert bond["disposals"] == 14
 
 
 def test_list_season_match_urls():
