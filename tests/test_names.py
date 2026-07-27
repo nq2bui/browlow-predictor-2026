@@ -13,3 +13,13 @@ def test_normalize_footywire_style_name():
 
 def test_normalize_multi_word_surname():
     assert normalize_player_name("Van Berlo, Jack") == "J. Van Berlo"
+
+
+def test_normalize_apostrophe_surname():
+    assert normalize_player_name("O'Meara, Jaeger") == "J. O'Meara"
+    assert normalize_player_name("J O'Meara") == "J. O'Meara"
+
+
+def test_normalize_hyphenated_surname():
+    assert normalize_player_name("Smith-Jones, Pat") == "P. Smith-Jones"
+    assert normalize_player_name("P Smith-Jones") == "P. Smith-Jones"
