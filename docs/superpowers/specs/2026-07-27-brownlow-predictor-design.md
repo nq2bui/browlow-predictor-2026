@@ -68,11 +68,12 @@ for earlier seasons during backfill, not blocking the plan.
 ## Modeling approach
 
 **Single gradient-boosted model (LightGBM), trained on the full 2012+
-history, using all 17 features where available and leaving the 4 newest
-Champion-Data stats as NaN for seasons before their source's coverage
-begins.** LightGBM/XGBoost-style tree models handle missing features
-natively (no imputation needed), so this needs only one training pipeline
-while still using every season of data available for each feature.
+history, using the 14 verified-available features (see Components).**
+LightGBM/XGBoost-style tree models handle missing values natively, which
+still matters in practice (e.g. a source page failing to load for one
+match, or occasional per-column data gaps), even though the v1 feature set
+itself doesn't have an era-based missingness split like the original 17
+would have.
 
 This was chosen over two alternatives:
 - *Basic-stats-only, 1984+ history*: simpler and has more historical data,
@@ -96,7 +97,11 @@ Same pattern as `afl-tipster`: a GitHub repo with a single static
 that runs on a schedule via GitHub Actions and commits the refreshed page
 directly to `main`. No separate frontend/backend hosting.
 
-Two pipelines share one trained model artifact:
+Two pipelines share one trained model artifact and the **same scraper
+modules** — afltables.com and footywire.com both publish match pages within
+hours of full-time, so the weekly pipeline doesn't need a separate "live"
+data source; it calls the exact same parsers the backfill pipeline uses,
+just pointed at the newest round.
 1. **Backfill/training pipeline** — run once, re-run occasionally to
    retrain as more 2026 data accumulates or data sources change.
 2. **Weekly update pipeline** — GitHub Actions cron, runs after each round
@@ -105,11 +110,17 @@ Two pipelines share one trained model artifact:
 ## Components
 
 - **`backfill_data.py`** — one-time (re-runnable) script. Scrapes
-  afltables.com for Brownlow votes + 8 basic stats (2012–2025) and
-  footywire.com for the 5 mid-tier advanced stats (2012+). Pulls
-  kick-ins/intercept marks/intercept possessions/spoils from
-  wheeloratings.com (2019+). Joins everything into one
-  row-per-player-per-game training table (17 stat columns + actual votes
+  afltables.com match pages (`afl/stats/games/{year}/*.html`, enumerated via
+  the `afl/brownlow/brownlow{year}rbr.html` round index) for Brownlow votes
+  + 12 stats verified present directly on that page (the 8 basic stats plus
+  clearances, contested possessions, contested marks, goal assists), and
+  footywire.com's advanced match-stats page (`ft_match_statistics?mid=...&advv=Y`)
+  for 2 more (score involvements, and intercepts as a partial proxy toward
+  intercept possessions). That's **14 of the 17** umpire-visible categories,
+  reliably free and structurally verified against real fetched pages. The
+  remaining 3 (kick-ins, intercept marks specifically, spoils) are the
+  documented v1 gap — see Data source findings. Joins everything into one
+  row-per-player-per-match training table (14 stat columns + actual votes
   0/1/2/3 as label). Saved as a versioned dataset file (e.g. Parquet).
 
 - **`train_model.py`** — trains the LightGBM ranking model on the backfill
