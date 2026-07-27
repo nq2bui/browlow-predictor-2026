@@ -57,10 +57,34 @@ def test_rows_to_dataframe_has_expected_columns():
 
 
 def test_unmatched_footywire_player_is_logged(caplog):
-    footywire_html_with_extra_player = FOOTYWIRE_FIXTURE.replace(
+    # Build a footywire fixture where ONE player is made to line up exactly with a
+    # real afltables player on the join key of (team, normalized_name), and another
+    # is left as a genuine mismatch. This proves the warning is *selective*: it must
+    # fire for the mismatch but stay silent for the player that matches -- otherwise
+    # the test can't distinguish "logs unmatched names" from "logs every row".
+    #
+    # afltables has ("Richmond", "S. Bolton") (Bolton, Shai). We retitle the first
+    # footywire team block to "Richmond" and rename its top player "O Florent" to
+    # "S Bolton" so it normalizes to "S. Bolton" and joins cleanly. The other players
+    # in that block (e.g. "J Lloyd" -> "J. Lloyd") have no Richmond counterpart in
+    # afltables and remain genuine mismatches.
+    footywire_html = FOOTYWIRE_FIXTURE.replace(
+        "<a name=t1></a>Sydney Match Statistics",
+        "<a name=t1></a>Richmond Match Statistics",
+    ).replace(
         'title="Oliver Florent">O Florent</a>',
-        'title="Oliver Florent">O Florento</a>',  # simulate a name mismatch
+        'title="Oliver Florent">S Bolton</a>',  # now matches afltables ("Richmond", "S. Bolton")
     )
+
     with caplog.at_level(logging.WARNING):
-        assemble_match_records(2023, "031420230316", AFLTABLES_FIXTURE, footywire_html_with_extra_player)
-    assert any("O. Florento" in record.message for record in caplog.records)
+        assemble_match_records(2023, "031420230316", AFLTABLES_FIXTURE, footywire_html)
+
+    warning_messages = [record.message for record in caplog.records]
+
+    # 1. The genuinely mismatched player IS logged.
+    assert any("J. Lloyd" in message for message in warning_messages), warning_messages
+
+    # 2. The player made to match "S. Bolton" is NOT logged, even though it was
+    #    present in the footywire lookup and processed alongside the mismatches.
+    #    This is what proves the warning is selective rather than fired per-row.
+    assert not any("S. Bolton" in message for message in warning_messages), warning_messages
