@@ -1,8 +1,15 @@
 from pathlib import Path
 
-from brownlow.afltables import parse_match_header, parse_match_page
+from brownlow.afltables import (
+    list_season_match_urls,
+    parse_match_header,
+    parse_match_page,
+)
 
 FIXTURE = Path("tests/fixtures/afltables_match_sample.html").read_text()
+SEASON_INDEX_FIXTURE = Path(
+    "tests/fixtures/afltables_season_index_sample.html"
+).read_text()
 
 
 def test_parse_match_header():
@@ -79,3 +86,12 @@ def test_parse_match_page_handles_non_25_colspan():
     assert row["disposals"] == 20
     assert row["goals"] == 2
     assert row["brownlow_votes"] == 3
+
+
+def test_list_season_match_urls():
+    urls = list_season_match_urls(SEASON_INDEX_FIXTURE)
+    assert urls == [
+        "https://afltables.com/afl/stats/games/2023/031420230316.html",
+        "https://afltables.com/afl/stats/games/2023/040920230317.html",
+        "https://afltables.com/afl/stats/games/2023/121820230318.html",
+    ]
