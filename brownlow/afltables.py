@@ -49,9 +49,18 @@ def parse_match_page(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     rows = []
     for table in soup.find_all("table", class_="sortable"):
-        header_th = table.find("th", colspan="25")
+        header_th = next(
+            th
+            for th in table.find_all("th")
+            if "Match Statistics" in th.get_text()
+        )
         team_name = header_th.get_text(strip=True).split(" Match Statistics")[0]
-        header_cells = [th.get_text(strip=True) for th in table.find_all("tr")[1].find_all("th")]
+        header_row = next(
+            tr
+            for tr in table.find_all("tr")
+            if any(th.get_text(strip=True) == "Player" for th in tr.find_all("th"))
+        )
+        header_cells = [th.get_text(strip=True) for th in header_row.find_all("th")]
 
         for tr in table.find("tbody").find_all("tr"):
             cells = [td.get_text(strip=True) for td in tr.find_all("td")]

@@ -50,3 +50,32 @@ def test_parse_match_page_blank_cells_become_zero():
     assert baker["brownlow_votes"] == 0
     assert baker["hitouts"] == 0
     assert baker["clearances"] == 0
+
+
+def test_parse_match_page_handles_non_25_colspan():
+    # Robustness: an older/newer afltables season may have a different total
+    # column count, so the team-name header th could carry any colspan (here
+    # 20, not 25). Team name + stat header must still be located by content.
+    html = """
+    <html><body>
+    <table class="sortable">
+      <thead>
+        <tr><th colspan=20>Geelong Match Statistics [<a href="#">Season</a>][<a href="#">Game by Game</a>]</th></tr>
+        <tr><th>#</th><th>Player</th><th>KI</th><th>MK</th><th>HB</th><th>DI</th><th>GL</th><th>BR</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Dangerfield, Patrick</td><td>12</td><td>4</td><td>8</td><td>20</td><td>2</td><td>3</td></tr>
+      </tbody>
+    </table>
+    </body></html>
+    """
+    rows = parse_match_page(html)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["team"] == "Geelong"
+    assert row["player"] == "Dangerfield, Patrick"
+    assert row["kicks"] == 12
+    assert row["handballs"] == 8
+    assert row["disposals"] == 20
+    assert row["goals"] == 2
+    assert row["brownlow_votes"] == 3
