@@ -21,16 +21,16 @@ OUTPUT_PATH = "index.html"
 def build_current_season_dataframe(season: int, fetch=fetch_url) -> pd.DataFrame:
     try:
         index_html = fetch(SEASON_INDEX_URL_TEMPLATE.format(year=season))
-    except Exception:
-        logger.error("could not fetch season index for %s, aborting weekly update", season)
+    except Exception as e:
+        logger.error("could not fetch season index for %s, aborting weekly update: %s", season, e)
         return pd.DataFrame()
 
     match_urls = list_season_match_urls(index_html)
 
     try:
         footywire_matches = list_season_match_ids(fetch(SEASON_MATCH_LIST_URL_TEMPLATE.format(year=season)))
-    except Exception:
-        logger.warning("could not fetch footywire match list for %s, continuing without it", season)
+    except Exception as e:
+        logger.warning("could not fetch footywire match list for %s, continuing without it: %s", season, e)
         footywire_matches = []
     footywire_html_by_teams = {}
     for match in footywire_matches:
@@ -38,20 +38,25 @@ def build_current_season_dataframe(season: int, fetch=fetch_url) -> pd.DataFrame
             footywire_html_by_teams[(match["home_team"], match["away_team"])] = fetch(
                 MATCH_STATS_URL_TEMPLATE.format(mid=match["mid"])
             )
-        except Exception:
-            logger.warning("could not fetch footywire stats for mid=%s", match["mid"])
+        except Exception as e:
+            logger.warning("could not fetch footywire stats for mid=%s, skipping: %s", match["mid"], e)
 
     all_records = []
     for match_url in match_urls:
         match_id = match_url.rsplit("/", 1)[1].replace(".html", "")
         try:
             afltables_html = fetch(match_url)
-        except Exception:
-            logger.warning("could not fetch afltables match %s, skipping", match_url)
+        except Exception as e:
+            logger.warning("could not fetch afltables match %s, skipping: %s", match_url, e)
             continue
-        header = parse_match_header(afltables_html)
-        footywire_html = footywire_html_by_teams.get((header["home_team"], header["away_team"]))
-        all_records.extend(assemble_match_records(season, match_id, afltables_html, footywire_html))
+
+        try:
+            header = parse_match_header(afltables_html)
+            footywire_html = footywire_html_by_teams.get((header["home_team"], header["away_team"]))
+            all_records.extend(assemble_match_records(season, match_id, afltables_html, footywire_html))
+        except Exception as e:
+            logger.warning("could not parse/assemble afltables match %s, skipping: %s", match_url, e)
+            continue
 
     return pd.DataFrame(all_records)
 
