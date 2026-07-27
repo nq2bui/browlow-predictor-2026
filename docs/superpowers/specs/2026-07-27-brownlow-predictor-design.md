@@ -23,14 +23,21 @@ pattern (single static HTML dashboard + GitHub Actions cron) for consistency.
 ## Data source findings
 
 Research (via public web sources — afltables.com, footywire.com,
-wheeloratings.com, squiggle.com.au, AFL CFS API) found:
+wheeloratings.com, squiggle.com.au, AFL CFS API) found, and **verified
+against real fetched pages**:
 
-| Stat group | Categories | Free source | Historical depth |
+| Stat group | Categories | Verified source | Historical depth |
 |---|---|---|---|
-| Basic | kicks, handballs, disposals, marks, tackles, goals, behinds, hitouts | afltables.com | Back to 1984 |
-| Mid-tier advanced | contested marks, goal assists, score involvements, clearances, contested possessions | footywire.com | ~2012 onward |
-| Newest advanced | kick-ins, intercept marks, intercept possessions, spoils | wheeloratings.com (needs deeper verification of structure/reliability before building the poller) | ~2019-2021 onward, not free/reliable before that |
-| Brownlow votes (label) | actual 3-2-1 votes per player per match | afltables.com | Back to 1984 |
+| Basic (8) | kicks, handballs, disposals, marks, tackles, goals, behinds, hitouts | afltables.com match pages (`afl/stats/games/{year}/{code}{date}.html`) — columns `KI, HB, DI, MK, GL, BH, HO, TK` | Back to 1984 |
+| Mid-tier (4 of 5) | clearances (`CL`), contested possessions (`CP`), contested marks (`CM`), goal assists (`GA`) | **Same afltables.com match page** — these columns are already present alongside the basic 8 and the votes column, one fetch per match | Same page/window as basic stats |
+| Mid-tier (1 of 5) | score involvements | footywire.com match_statistics page (`ft_match_statistics?mid=...`), column `SC` | ~2012 onward (confirmed via a 2021 match; earliest coverage not exhaustively tested) |
+| Newest (4) | kick-ins, intercept marks, intercept possessions, spoils | **Unconfirmed.** wheeloratings.com renders its stats table via a client-side JS/API call that static fetching cannot see; its glossary confirms contested-possession/contested-mark/intercept-mark/intercept-possession terminology but "spoils" was not found in glossary text at all. Getting a real, working scraper for these 4 requires live browser network inspection (out of scope for v1 — see Modeling approach). | Unknown |
+| Brownlow votes (label) | actual 3-2-1 votes per player per match | **Same afltables.com match page**, column `BR` — one fetch gives votes + 12 stats together | Back to 1984 (though `BR` is presumably only populated in the 3-2-1-era rows; earlier eras used different vote systems and are out of scope) |
+
+Also verified: `afltables.com/afl/brownlow/brownlow{year}rbr.html` is a
+round-by-round index page that links to every match's stats page for that
+season — this is the practical entry point for bulk-harvesting match URLs
+per season.
 
 Other findings:
 - Squiggle API has no per-player stats (team/game-level only, explicitly
@@ -43,11 +50,20 @@ Other findings:
   pages. No explicit ToS blessing either way — poll politely and
   rate-limit, consistent with how `afl-tipster` treats its external APIs.
 
-**Training window**: 2012–present, since that's the first year with the
-5 mid-tier advanced stats available. The 4 newest stats (kick-ins, intercept
-marks, intercept possessions, spoils) will be missing/NaN for rows before
-their respective source's coverage starts (~2019-2021) — see Modeling
-approach below for how this is handled.
+**v1 scope decision**: ship with the **12 of 17 stats that are reliably
+free and structurally verified** (all 8 basic + CL/CP/CM/GA from afltables,
+SC from footywire), rather than blocking the whole project on wheeloratings'
+unconfirmed API. The remaining 4 stats (kick-ins, intercept marks, intercept
+possessions, spoils) are a documented follow-up once a live browser session
+can inspect wheeloratings' actual network traffic (or another source is
+found) — this is additive, not a redesign, because the model already
+handles missing features as NaN (see Modeling approach).
+
+**Training window**: 2012–present. afltables' 12 stats + votes are
+structurally available for this whole window (actual data completeness at
+the older end to be confirmed empirically during backfill); footywire's SC
+column is confirmed back to at least 2021 and needs a quick empirical check
+for earlier seasons during backfill, not blocking the plan.
 
 ## Modeling approach
 
