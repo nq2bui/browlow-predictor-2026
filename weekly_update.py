@@ -3,7 +3,12 @@ import logging
 
 import pandas as pd
 
-from brownlow.afltables import SEASON_INDEX_URL_TEMPLATE, list_season_match_urls, parse_match_header
+from brownlow.afltables import (
+    SEASON_INDEX_URL_TEMPLATE,
+    list_season_match_urls,
+    match_id_from_url,
+    parse_match_header,
+)
 from brownlow.footywire import SEASON_MATCH_LIST_URL_TEMPLATE, MATCH_STATS_URL_TEMPLATE, list_season_match_ids
 from brownlow.dataset import assemble_match_records
 from brownlow.model import load_model
@@ -43,7 +48,7 @@ def build_current_season_dataframe(season: int, fetch=fetch_url) -> pd.DataFrame
 
     all_records = []
     for match_url in match_urls:
-        match_id = match_url.rsplit("/", 1)[1].replace(".html", "")
+        match_id = match_id_from_url(match_url)
         try:
             afltables_html = fetch(match_url)
         except Exception as e:
@@ -53,6 +58,15 @@ def build_current_season_dataframe(season: int, fetch=fetch_url) -> pd.DataFrame
         try:
             header = parse_match_header(afltables_html)
             footywire_html = footywire_html_by_teams.get((header["home_team"], header["away_team"]))
+            if footywire_html is None:
+                logger.warning(
+                    "no footywire match found for afltables team pairing (%s, %s) "
+                    "in match %s -- footywire-derived features will be 0 for this "
+                    "match (possible team-name mismatch between the two sources)",
+                    header["home_team"],
+                    header["away_team"],
+                    match_url,
+                )
             all_records.extend(assemble_match_records(season, match_id, afltables_html, footywire_html))
         except Exception as e:
             logger.warning("could not parse/assemble afltables match %s, skipping: %s", match_url, e)

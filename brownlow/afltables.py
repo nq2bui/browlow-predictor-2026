@@ -22,6 +22,11 @@ _COLUMN_TO_FIELD = {
 SEASON_INDEX_URL_TEMPLATE = "https://afltables.com/afl/brownlow/brownlow{year}rbr.html"
 
 
+def match_id_from_url(url: str) -> str:
+    """Extract the afltables match id (the filename stem) from a match URL."""
+    return re.search(r"/(\w+)\.html$", url).group(1)
+
+
 def parse_match_header(html: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
     summary_table = soup.find("table")

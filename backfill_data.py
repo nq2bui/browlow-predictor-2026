@@ -1,12 +1,13 @@
 import argparse
 import logging
-import re
+from pathlib import Path
 
 import pandas as pd
 
 from brownlow.afltables import (
     SEASON_INDEX_URL_TEMPLATE,
     list_season_match_urls,
+    match_id_from_url,
     parse_match_header,
 )
 from brownlow.footywire import (
@@ -18,10 +19,6 @@ from brownlow.dataset import assemble_match_records
 from brownlow.http import fetch_url
 
 logger = logging.getLogger(__name__)
-
-
-def _match_id_from_url(url: str) -> str:
-    return re.search(r"/(\w+)\.html$", url).group(1)
 
 
 def backfill_seasons(start_season: int, end_season: int, fetch=fetch_url) -> pd.DataFrame:
@@ -55,7 +52,7 @@ def backfill_seasons(start_season: int, end_season: int, fetch=fetch_url) -> pd.
                 logger.warning("could not fetch footywire stats for mid=%s: %s", match["mid"], e)
 
         for match_url in match_urls:
-            match_id = _match_id_from_url(match_url)
+            match_id = match_id_from_url(match_url)
             try:
                 afltables_html = fetch(match_url)
             except Exception as e:
@@ -67,6 +64,15 @@ def backfill_seasons(start_season: int, end_season: int, fetch=fetch_url) -> pd.
                 footywire_html = footywire_html_by_teams.get(
                     (header["home_team"], header["away_team"])
                 )
+                if footywire_html is None:
+                    logger.warning(
+                        "no footywire match found for afltables team pairing (%s, %s) "
+                        "in match %s -- footywire-derived features will be 0 for this "
+                        "match (possible team-name mismatch between the two sources)",
+                        header["home_team"],
+                        header["away_team"],
+                        match_url,
+                    )
                 match_records = assemble_match_records(
                     season, match_id, afltables_html, footywire_html
                 )
@@ -89,6 +95,7 @@ def main():
 
     logging.basicConfig(level=logging.INFO)
     df = backfill_seasons(args.start_season, args.end_season)
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(args.output, index=False)
     logger.info("wrote %d rows to %s", len(df), args.output)
 

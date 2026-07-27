@@ -34,3 +34,23 @@ full data source research and rationale.
 
 - Spec: `docs/superpowers/specs/2026-07-27-brownlow-predictor-design.md`
 - Plan: `docs/superpowers/plans/2026-07-27-brownlow-predictor.md`
+
+## Known Limitations
+
+- **Team names are NOT canonicalized between afltables and footywire.**
+  `brownlow/names.py` normalizes player names only. The afltables→footywire
+  join is keyed on raw team-name strings at two points: the match-level lookup
+  (`footywire_html_by_teams.get((home_team, away_team))` in `backfill_data.py`
+  and `weekly_update.py`) and the per-player join in `brownlow/dataset.py`.
+  This relies on both sites spelling every team identically. That assumption
+  holds for the sample fixtures (Richmond, Carlton, Sydney, Geelong,
+  Collingwood) but has **not** been verified against real historical data
+  across all 18 AFL teams, where known aliases exist (e.g. "Greater Western
+  Sydney" vs "GWS", "Western Bulldogs" vs "Footscray", "Brisbane Lions" vs
+  "Brisbane"). A mismatch silently degrades the 2 footywire-derived features
+  (`score_involvements`, `intercepts`) to 0 for every player in the affected
+  match. As of the final-review fixes, the match-level miss is at least logged
+  (`logger.warning` in both entry points) so it is visible in run logs rather
+  than fully silent — but nothing corrects it. **Fast-follow:** build and
+  verify a real team-name canonicalization map against live data before
+  trusting footywire features on the full historical backfill.
