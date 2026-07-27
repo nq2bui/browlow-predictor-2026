@@ -1,5 +1,9 @@
 import time
 from unittest.mock import patch, MagicMock
+
+import pytest
+import requests
+
 from brownlow.http import fetch_url
 
 
@@ -22,4 +26,21 @@ def test_fetch_url_rate_limits_same_host():
         with patch("brownlow.http.time.sleep") as mock_sleep:
             fetch_url("https://example.com/a.html", min_interval_seconds=2.0)
             fetch_url("https://example.com/b.html", min_interval_seconds=2.0)
+    mock_sleep.assert_called()
+
+
+def test_fetch_url_rate_limits_after_failed_request():
+    mock_response = MagicMock()
+    mock_response.text = "<html>ok</html>"
+    mock_response.raise_for_status = MagicMock(
+        side_effect=requests.HTTPError("500 Server Error")
+    )
+    with patch("brownlow.http.requests.get", return_value=mock_response):
+        with patch("brownlow.http.time.sleep") as mock_sleep:
+            with pytest.raises(requests.HTTPError):
+                fetch_url("https://failhost.example.com/a.html", min_interval_seconds=2.0)
+            # Second call to the same host: the failed request's timestamp was
+            # still recorded, so the rate limiter must sleep before retrying.
+            with pytest.raises(requests.HTTPError):
+                fetch_url("https://failhost.example.com/b.html", min_interval_seconds=2.0)
     mock_sleep.assert_called()
