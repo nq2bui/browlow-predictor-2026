@@ -10,6 +10,9 @@ def train_ranker(df: pd.DataFrame) -> lgb.LGBMRanker:
     df_sorted = df.sort_values("match_id").reset_index(drop=True)
     group_sizes = df_sorted.groupby("match_id", sort=False).size().tolist()
 
+    # min_child_samples=1 because LightGBM's default (20) is too high for our
+    # small per-match ranking groups (a match has ~44 players). May need
+    # re-tuning once trained on the full real 2012+ dataset (thousands of rows).
     model = lgb.LGBMRanker(objective="lambdarank", min_child_samples=1)
     model.fit(
         df_sorted[STAT_COLUMNS],

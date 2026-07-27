@@ -1,5 +1,9 @@
 # Brownlow Predictor 2026 — Project Context
 
+## Setup
+
+macOS users need `brew install libomp` before `pip install -r requirements.txt`, or LightGBM's native library fails to load on import.
+
 ## Overview
 
 Predicts the top 20 finishers in the 2026 AFL Brownlow Medal count. A
