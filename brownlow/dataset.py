@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 
 from brownlow.afltables import parse_match_header, parse_match_page
 from brownlow.footywire import parse_advanced_stats_page
 from brownlow.names import normalize_player_name
+
+logger = logging.getLogger(__name__)
 
 STAT_COLUMNS = [
     "kicks", "handballs", "disposals", "marks", "goals", "behinds", "hitouts", "tackles",
@@ -29,6 +33,11 @@ def assemble_match_records(
         for row in parse_advanced_stats_page(footywire_html):
             key = (row["team"], normalize_player_name(row["player"]))
             footywire_lookup[key] = row
+
+    afltables_keys = {(row["team"], normalize_player_name(row["player"])) for row in afltables_rows}
+    for key in footywire_lookup:
+        if key not in afltables_keys:
+            logger.warning("footywire player %s (%s) not found in afltables match %s", key[1], key[0], match_id)
 
     records = []
     for row in afltables_rows:

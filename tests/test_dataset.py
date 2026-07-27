@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from brownlow.dataset import assemble_match_records, rows_to_dataframe, STAT_COLUMNS
@@ -53,3 +54,13 @@ def test_rows_to_dataframe_has_expected_columns():
     for col in STAT_COLUMNS + ["season", "round", "date", "match_id", "team", "player", "brownlow_votes"]:
         assert col in df.columns
     assert len(df) == 6
+
+
+def test_unmatched_footywire_player_is_logged(caplog):
+    footywire_html_with_extra_player = FOOTYWIRE_FIXTURE.replace(
+        'title="Oliver Florent">O Florent</a>',
+        'title="Oliver Florent">O Florento</a>',  # simulate a name mismatch
+    )
+    with caplog.at_level(logging.WARNING):
+        assemble_match_records(2023, "031420230316", AFLTABLES_FIXTURE, footywire_html_with_extra_player)
+    assert any("O. Florento" in record.message for record in caplog.records)
