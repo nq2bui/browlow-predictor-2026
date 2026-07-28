@@ -31,6 +31,16 @@ def parse_advanced_stats_page(html: str) -> list[dict]:
             tds = tr.find_all("td")
             player = tds[0].get_text(strip=True)
             values = [td.get_text(strip=True) for td in tds[1:]]
+            # A player named as an emergency/substitute who never took the field
+            # gets a short "Unused Substitute" row: just the name and a single
+            # colspan cell (2 <td>s), not the 18 a genuine player row has. Its
+            # values list is too short to hold the SI/ITC columns, so indexing
+            # it raised IndexError and crashed the whole backfill. Such a player
+            # legitimately has no stats -- skip the row entirely, matching how
+            # the pipeline already treats a player it finds no data for, rather
+            # than recording them with fabricated zeroes.
+            if len(values) <= max(si_index, itc_index):
+                continue
             rows.append({
                 "team": team,
                 "player": player,

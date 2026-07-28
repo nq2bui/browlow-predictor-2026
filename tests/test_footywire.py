@@ -21,6 +21,17 @@ MATCH_LIST_WITH_NOISE_FIXTURE = Path(
 MATCH_LIST_REAL_2021_FIXTURE = Path(
     "tests/fixtures/footywire_match_list_real_2021_sample.html"
 ).read_text()
+# Real advanced-stats page rows sliced verbatim from a live captured page
+# (.superpowers/sdd/debug_real_footywire_unused_substitute.html, Collingwood v
+# Western Bulldogs, mid=10328, 2021 round 1). Every genuine player row has 18
+# <td> cells (Player + 17 stat columns), but a player named as an
+# emergency/substitute who never took the field gets an "Unused Substitute" row
+# with only 2 <td> cells: the name and a colspan="17" "Unused Substitute" cell.
+# The old parser indexed values[si_index] (~11) on that 1-element values list
+# and raised IndexError, crashing the whole backfill.
+ADV_WITH_UNUSED_SUB_FIXTURE = Path(
+    "tests/fixtures/footywire_advanced_stats_with_unused_substitute_sample.html"
+).read_text()
 
 
 def test_parse_advanced_stats_page():
@@ -38,6 +49,34 @@ def test_parse_advanced_stats_page():
     assert selwood["team"] == "Geelong"
     assert selwood["score_involvements"] == 9
     assert selwood["intercepts"] == 7
+
+
+def test_parse_advanced_stats_page_skips_unused_substitute_rows():
+    # A player named as an emergency but who never played gets an "Unused
+    # Substitute" row with only 2 <td> cells instead of the usual 18. The old
+    # parser raised IndexError reaching for values[si_index] on that short row.
+    # The fix skips any row too short to contain the SI/ITC values, so the
+    # unused substitutes (C Brown, R West) are omitted entirely -- matching how
+    # the pipeline already treats a player it has no data for -- while the
+    # genuine player rows are still parsed with their real SI/ITC values.
+    rows = parse_advanced_stats_page(ADV_WITH_UNUSED_SUB_FIXTURE)
+
+    players = {r["player"] for r in rows}
+    assert "C Brown" not in players  # Collingwood unused substitute
+    assert "R West" not in players  # Western Bulldogs unused substitute
+
+    pendlebury = next(r for r in rows if r["player"] == "S Pendlebury")
+    assert pendlebury["team"] == "Collingwood"
+    assert pendlebury["score_involvements"] == 7
+    assert pendlebury["intercepts"] == 7
+
+    smith = next(r for r in rows if r["player"] == "B Smith")
+    assert smith["team"] == "Western Bulldogs"
+    assert smith["score_involvements"] == 7
+    assert smith["intercepts"] == 5
+
+    # Only the genuine players survive: 2 per team in the sliced fixture.
+    assert len(rows) == 4
 
 
 def test_list_season_match_ids():
