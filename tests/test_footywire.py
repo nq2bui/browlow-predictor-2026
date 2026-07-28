@@ -11,6 +11,16 @@ MATCH_LIST_FIXTURE = Path("tests/fixtures/footywire_match_list_sample.html").rea
 MATCH_LIST_WITH_NOISE_FIXTURE = Path(
     "tests/fixtures/footywire_match_list_with_noise_sample.html"
 ).read_text()
+# Real match rows sliced verbatim from a live captured page
+# (.superpowers/sdd/debug_real_footywire_matchlist_2021.html). Genuine
+# completed-match rows have 7 <td> cells: [0] date, [1] team names (2 links),
+# [2] venue, [3] attendance (plain number, no link), [4] result (the
+# ft_match_statistics?mid=... link lives HERE, not in [3]), [5] leading
+# disposals, [6] leading goals. The old parser looked for the link in tds[3]
+# (attendance, no <a>) and therefore returned zero matches on real pages.
+MATCH_LIST_REAL_2021_FIXTURE = Path(
+    "tests/fixtures/footywire_match_list_real_2021_sample.html"
+).read_text()
 
 
 def test_parse_advanced_stats_page():
@@ -48,4 +58,18 @@ def test_list_season_match_ids_skips_non_match_noise_rows():
     assert matches == [
         {"mid": 10751, "home_team": "Richmond", "away_team": "Carlton"},
         {"mid": 10752, "home_team": "Collingwood", "away_team": "Sydney"},
+    ]
+
+
+def test_list_season_match_ids_real_2021_seven_column_rows():
+    # Real footywire match rows have 7 columns and the ft_match_statistics?mid=
+    # link lives in the RESULT column (index 4), not the attendance column
+    # (index 3). The old parser hardcoded tds[3], found no <a> there, and
+    # returned an empty list for every genuine match. These rows are sliced
+    # verbatim from a real captured 2021 page.
+    matches = list_season_match_ids(MATCH_LIST_REAL_2021_FIXTURE)
+    assert matches == [
+        {"mid": 10327, "home_team": "Richmond", "away_team": "Carlton"},
+        {"mid": 10328, "home_team": "Collingwood", "away_team": "Western Bulldogs"},
+        {"mid": 10329, "home_team": "Melbourne", "away_team": "Fremantle"},
     ]

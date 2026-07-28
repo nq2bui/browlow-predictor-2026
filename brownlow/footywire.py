@@ -56,7 +56,12 @@ def list_season_match_ids(match_list_html: str) -> list[dict]:
         team_links = tds[1].find_all("a")
         if len(team_links) != 2:
             continue
-        mid_link = tds[3].find("a")
+        # The match-stats link is NOT at a fixed column index. On real
+        # completed-match rows it lives in the result column (index 4), while
+        # the attendance column (index 3) holds a plain number with no <a>.
+        # Search the whole row for the link by what it actually IS -- an
+        # ft_match_statistics?mid=... anchor -- rather than by position.
+        mid_link = tr.find("a", href=re.compile(r"ft_match_statistics\?mid=\d+"))
         if mid_link is None:
             continue
         mid_match = re.search(r"mid=(\d+)", mid_link["href"])
