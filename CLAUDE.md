@@ -26,7 +26,7 @@ cron pattern.
 | Data | Source | Notes |
 |------|--------|-------|
 | Brownlow votes + 12 stats | afltables.com match pages | `afl/stats/games/{year}/{id}.html`, enumerated via `afl/brownlow/brownlow{year}rbr.html` |
-| Score involvements + intercepts | footywire.com advanced stats | `ft_match_statistics?mid=...&advv=Y`, match IDs enumerated via `ft_match_list?year=...` |
+| Score involvements + intercepts | footywire.com advanced stats | `ft_match_statistics?mid=...&advv=Y`, match IDs enumerated via `ft_match_list?year=...`. Verified against real pages: these 2 columns don't exist on footywire's advanced-stats page before **2015** (2012-2014 pages have 11 columns, no SI/ITC; 2015+ have 18). `parse_advanced_stats_page` defaults both to 0 when absent rather than crashing. |
 
 See `docs/superpowers/specs/2026-07-27-brownlow-predictor-design.md` for
 full data source research and rationale.
