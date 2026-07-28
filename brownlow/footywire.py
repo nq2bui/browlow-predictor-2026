@@ -24,8 +24,19 @@ def parse_advanced_stats_page(html: str) -> list[dict]:
     rows = []
     for team, table in zip(teams, stats_tables):
         headers = [s.get_text(strip=True) for s in table.find_all("span", class_="sortByAjaxLink")]
-        si_index = headers.index("SI") - 1  # -1 because headers includes "Player" but tds after the player cell don't
-        itc_index = headers.index("ITC") - 1
+        # -1 because headers includes "Player" but the tds after the player
+        # cell don't. footywire's older (2012-era) advanced-stats pages track a
+        # SMALLER column set that lacks "SI" (Score Involvements) and "ITC"
+        # (Intercepts) entirely -- those were added by footywire sometime after
+        # 2012. When a column is absent for this page/table, default its stat to
+        # 0 for every player rather than crashing on headers.index(...), matching
+        # how the pipeline already treats data it can't find.
+        si_index = headers.index("SI") - 1 if "SI" in headers else None
+        itc_index = headers.index("ITC") - 1 if "ITC" in headers else None
+        # Highest column index this table actually needs to read; used to skip
+        # short rows. None when neither column is present (nothing to read).
+        needed_indices = [i for i in (si_index, itc_index) if i is not None]
+        max_needed = max(needed_indices) if needed_indices else -1
 
         for tr in table.find_all("tr", class_=["darkcolor", "lightcolor"]):
             tds = tr.find_all("td")
@@ -39,13 +50,19 @@ def parse_advanced_stats_page(html: str) -> list[dict]:
             # legitimately has no stats -- skip the row entirely, matching how
             # the pipeline already treats a player it finds no data for, rather
             # than recording them with fabricated zeroes.
-            if len(values) <= max(si_index, itc_index):
+            if len(values) <= max_needed:
                 continue
+
+            def stat(index):
+                if index is None:
+                    return 0
+                return int(values[index]) if values[index].replace(".", "").isdigit() else 0
+
             rows.append({
                 "team": team,
                 "player": player,
-                "score_involvements": int(values[si_index]) if values[si_index].replace(".", "").isdigit() else 0,
-                "intercepts": int(values[itc_index]) if values[itc_index].replace(".", "").isdigit() else 0,
+                "score_involvements": stat(si_index),
+                "intercepts": stat(itc_index),
             })
     return rows
 

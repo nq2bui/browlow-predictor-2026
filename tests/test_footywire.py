@@ -32,6 +32,17 @@ MATCH_LIST_REAL_2021_FIXTURE = Path(
 ADV_WITH_UNUSED_SUB_FIXTURE = Path(
     "tests/fixtures/footywire_advanced_stats_with_unused_substitute_sample.html"
 ).read_text()
+# Real advanced-stats page rows sliced verbatim from a live captured 2012 page
+# (.superpowers/sdd/debug_real_footywire_2012_no_si_itc.html, GWS v Sydney,
+# mid=5343). footywire's older advanced-stats pages track a SMALLER column set:
+# ['Player', 'CP', 'UP', 'ED', 'DE%', 'CM', 'GA', 'MI5', '1%', 'BO', 'TOG%'] --
+# with no 'SI' (Score Involvements) or 'ITC' (Intercepts) columns at all (those
+# were added by footywire sometime after 2012). The old parser did
+# headers.index("SI"), which raised ValueError: 'SI' is not in list and crashed
+# the whole match's parse (~25% of 2012-2017 matches in the real backfill).
+ADV_NO_SI_ITC_FIXTURE = Path(
+    "tests/fixtures/footywire_advanced_stats_no_si_itc_sample.html"
+).read_text()
 
 
 def test_parse_advanced_stats_page():
@@ -77,6 +88,33 @@ def test_parse_advanced_stats_page_skips_unused_substitute_rows():
 
     # Only the genuine players survive: 2 per team in the sliced fixture.
     assert len(rows) == 4
+
+
+def test_parse_advanced_stats_page_older_page_without_si_itc_columns():
+    # footywire's older (2012-era) advanced-stats pages have a smaller column
+    # set that lacks the 'SI' and 'ITC' columns entirely. The old parser did
+    # headers.index("SI") and raised ValueError: 'SI' is not in list, crashing
+    # the whole match's parse. The fix defaults score_involvements/intercepts to
+    # 0 when those columns are absent, rather than crashing -- matching how the
+    # pipeline already treats data it can't find. These rows are sliced verbatim
+    # from a real captured 2012 GWS v Sydney page (mid=5343).
+    rows = parse_advanced_stats_page(ADV_NO_SI_ITC_FIXTURE)
+
+    # 2 real player rows per team were sliced into the fixture.
+    assert len(rows) == 4
+    teams = {r["team"] for r in rows}
+    assert teams == {"GWS", "Sydney"}
+
+    kennedy = next(r for r in rows if r["player"] == "Adam Kennedy")
+    assert kennedy["team"] == "GWS"
+    # These columns don't exist on the older page -> default to 0, no crash.
+    assert kennedy["score_involvements"] == 0
+    assert kennedy["intercepts"] == 0
+
+    jack = next(r for r in rows if r["player"] == "Kieren Jack")
+    assert jack["team"] == "Sydney"
+    assert jack["score_involvements"] == 0
+    assert jack["intercepts"] == 0
 
 
 def test_list_season_match_ids():
