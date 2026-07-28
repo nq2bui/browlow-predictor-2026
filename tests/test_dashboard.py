@@ -18,3 +18,22 @@ def test_render_leaderboard_writes_top_20_table(tmp_path):
     assert "Player19" in html
     assert "Player20" not in html  # only top 20 shown
     assert "<table" in html
+    # Richmond's logo path and brand-color accent render for a known team.
+    assert "logos/RIC.png" in html
+    assert "#FFD200" in html
+
+
+def test_render_leaderboard_omits_logo_for_unknown_team(tmp_path):
+    leaderboard = pd.DataFrame({
+        "player": ["Nobody"],
+        "team": ["Fake Team FC"],
+        "predicted_season_votes": [5.0],
+    })
+    output_path = tmp_path / "index.html"
+
+    render_leaderboard(leaderboard, str(output_path))
+
+    html = output_path.read_text()
+    # Unknown team degrades gracefully: no broken logo <img>, neutral swatch instead.
+    assert "logos/" not in html
+    assert "team-swatch" in html
