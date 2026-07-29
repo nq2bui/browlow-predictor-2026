@@ -13,7 +13,7 @@ from brownlow.afltables import (
 from brownlow.footywire import SEASON_MATCH_LIST_URL_TEMPLATE, MATCH_STATS_URL_TEMPLATE, list_season_match_ids
 from brownlow.dataset import assemble_match_records
 from brownlow.model import load_model
-from brownlow.weekly import accumulate_season_votes
+from brownlow.weekly import accumulate_season_votes, per_round_votes
 from brownlow.dashboard import render_leaderboard
 from brownlow.http import fetch_url
 
@@ -104,7 +104,11 @@ def main():
 
     model = load_model(MODEL_PATH)
     leaderboard = accumulate_season_votes(model, season_df)
-    render_leaderboard(leaderboard, OUTPUT_PATH)
+    # render_leaderboard shows only the top 20; compute per-round detail for
+    # exactly those players (same head(20) convention) to keep it cheap.
+    top_20_players = leaderboard.head(20)["player"].tolist()
+    round_votes = per_round_votes(model, season_df, top_20_players)
+    render_leaderboard(leaderboard, round_votes, OUTPUT_PATH)
     logger.info("wrote updated leaderboard to %s (%d players)", OUTPUT_PATH, len(leaderboard))
 
 

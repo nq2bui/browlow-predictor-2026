@@ -50,3 +50,78 @@ def accumulate_season_votes(model, season_df: pd.DataFrame) -> pd.DataFrame:
         .reset_index(drop=True)
     )
     return leaderboard[["player", "team", "predicted_season_votes"]]
+
+
+# Finals-round labels, in the order they occur in a season, sorted AFTER all
+# numeric home-and-away rounds.
+_FINALS_ORDER = ["QF", "SF", "PF", "GF"]
+
+
+def round_sort_key(round_value) -> tuple:
+    """Sort key for a ``round`` label so rounds display in real season order.
+
+    Convention: a plain-integer label ("1".."23") sorts ascending by its numeric
+    value and BEFORE any finals label. A finals label sorts after all numeric
+    rounds, in the order QF, SF, PF, GF. Any other (unrecognised) non-numeric
+    label sorts last, alphabetically among itself. This avoids the naive
+    string-sort trap where "10" would come before "2".
+    """
+    s = str(round_value)
+    if s.isdigit():
+        return (0, int(s), "")
+    if s in _FINALS_ORDER:
+        return (1, _FINALS_ORDER.index(s), "")
+    return (2, 0, s)
+
+
+def per_round_votes(model, season_df: pd.DataFrame, players: list) -> pd.DataFrame:
+    """Per-round discrete 3-2-1 votes for a specified set of players.
+
+    Output is scoped to ``players`` (e.g. the top-20 leaderboard). Crucially, the
+    3-2-1 allocation is computed on the FULL match (every player's row), exactly
+    as ``accumulate_season_votes`` does, and only then filtered down to the
+    requested players. This guarantees the per-round breakdown RECONCILES with
+    the season total on the leaderboard: a player's votes each round are the same
+    votes that summed into their ``predicted_season_votes``. (Filtering rows out
+    *before* scoring would re-rank a shrunken field and inflate votes, so a
+    player ranked 4th in the real match — 0 votes — could wrongly score 3.)
+
+    Only matches that actually contain a requested player are scored, so this
+    stays cheap without affecting correctness (votes are allocated per match).
+
+    Returns a DataFrame with columns ``player, round, votes`` — one row per
+    player per round they played (rounds not played simply have no row). If a
+    player appears more than once in the same round, their votes for that round
+    are summed. Rows are ordered by ``round_sort_key`` (numeric rounds ascending,
+    then finals QF/SF/PF/GF), and by player within a round.
+    """
+    player_set = set(players)
+    relevant_match_ids = set(
+        season_df.loc[season_df["player"].isin(player_set), "match_id"]
+    )
+    df = season_df[season_df["match_id"].isin(relevant_match_ids)].copy()
+
+    if df.empty:
+        return pd.DataFrame(columns=["player", "round", "votes"])
+
+    per_match_votes = [
+        assign_discrete_match_votes(model, match_df)
+        for _, match_df in df.groupby("match_id", sort=False)
+    ]
+    df["votes"] = pd.concat(per_match_votes)
+
+    # Keep only the requested players AFTER the per-match allocation.
+    df = df[df["player"].isin(player_set)]
+
+    result = (
+        df.groupby(["player", "round"])["votes"]
+        .sum()
+        .reset_index()
+    )
+    result["_key"] = result["round"].map(round_sort_key)
+    result = (
+        result.sort_values(["_key", "player"])
+        .drop(columns="_key")
+        .reset_index(drop=True)
+    )
+    return result[["player", "round", "votes"]]

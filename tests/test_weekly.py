@@ -1,7 +1,12 @@
 import pandas as pd
 from brownlow.dataset import STAT_COLUMNS
 from brownlow.model import train_ranker
-from brownlow.weekly import accumulate_season_votes, assign_discrete_match_votes
+from brownlow.weekly import (
+    accumulate_season_votes,
+    assign_discrete_match_votes,
+    per_round_votes,
+    round_sort_key,
+)
 
 
 def _season_df() -> pd.DataFrame:
@@ -116,3 +121,78 @@ def test_accumulate_season_votes_returns_discrete_3_2_1_sums():
     assert votes_by_player == {"Star": 6, "Mid": 4, "Low": 2, "Fringe": 0}
     assert (leaderboard["predicted_season_votes"] >= 0).all()
     assert list(leaderboard.columns) == ["player", "team", "predicted_season_votes"]
+
+
+def test_round_sort_key_orders_numeric_ascending_then_finals():
+    # Convention: plain-integer rounds sort ascending by numeric value; finals
+    # labels sort AFTER all numeric rounds, in the order QF, SF, PF, GF.
+    unsorted = ["10", "2", "QF", "1", "GF", "23", "SF", "PF"]
+    ordered = sorted(unsorted, key=round_sort_key)
+    assert ordered == ["1", "2", "10", "23", "QF", "SF", "PF", "GF"]
+
+
+def test_round_sort_key_naive_string_sort_would_be_wrong():
+    # Guard the specific numeric-vs-string trap: naive sort puts "10" before "2".
+    assert sorted(["10", "2", "1"], key=round_sort_key) == ["1", "2", "10"]
+
+
+def _multi_round_season_df():
+    # 3 rounds, one match each; 4 players per match with controlled kick scores
+    # so per-match 3-2-1 allocation is known exactly.
+    rows = []
+    for rnd in ["1", "2", "10"]:
+        mid = f"m{rnd}"
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 40, "match_id": mid, "round": rnd, "player": "Star", "team": "Rich"})
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 30, "match_id": mid, "round": rnd, "player": "Mid", "team": "Carl"})
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 20, "match_id": mid, "round": rnd, "player": "Low", "team": "Geel"})
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 10, "match_id": mid, "round": rnd, "player": "Fringe", "team": "Hawt"})
+    return pd.DataFrame(rows)
+
+
+def test_per_round_votes_returns_player_round_votes_scoped_to_players():
+    season_df = _multi_round_season_df()
+    scores = {40: 9.0, 30: 6.0, 20: 3.0, 10: 1.0}
+    model = _FakeModel(scores)
+
+    result = per_round_votes(model, season_df, ["Star", "Mid"])
+
+    assert list(result.columns) == ["player", "round", "votes"]
+    # Only requested players appear (scoping filter).
+    assert set(result["player"]) == {"Star", "Mid"}
+    # Star tops every match -> 3 votes each round; Mid is 2nd -> 2 each round.
+    star = result[result["player"] == "Star"]
+    assert list(star["round"]) == ["1", "2", "10"]  # numeric round order
+    assert list(star["votes"]) == [3, 3, 3]
+    mid = result[result["player"] == "Mid"]
+    assert list(mid["votes"]) == [2, 2, 2]
+
+
+def test_per_round_votes_orders_finals_after_numeric_rounds():
+    rows = []
+    for rnd in ["2", "GF", "1", "QF"]:
+        mid = f"m{rnd}"
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 40, "match_id": mid, "round": rnd, "player": "Star", "team": "Rich"})
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 10, "match_id": mid, "round": rnd, "player": "Other", "team": "Carl"})
+    season_df = pd.DataFrame(rows)
+    model = _FakeModel({40: 9.0, 10: 1.0})
+
+    result = per_round_votes(model, season_df, ["Star"])
+
+    assert list(result["round"]) == ["1", "2", "QF", "GF"]
+
+
+def test_per_round_votes_sums_duplicate_player_round_defensively():
+    # A player somehow has two rows in the same round (two matches same round).
+    rows = []
+    for mid in ["mA", "mB"]:
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 40, "match_id": mid, "round": "5", "player": "Star", "team": "Rich"})
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 10, "match_id": mid, "round": "5", "player": "Other", "team": "Carl"})
+    season_df = pd.DataFrame(rows)
+    model = _FakeModel({40: 9.0, 10: 1.0})
+
+    result = per_round_votes(model, season_df, ["Star"])
+
+    # One combined row for round 5, votes summed (3 + 3 = 6), not a crash/dup.
+    assert len(result) == 1
+    assert result.iloc[0]["round"] == "5"
+    assert result.iloc[0]["votes"] == 6

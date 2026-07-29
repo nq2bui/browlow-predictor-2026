@@ -1,4 +1,5 @@
 import html
+import json
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -96,6 +97,47 @@ _PAGE_TEMPLATE = """<!doctype html>
     font-size: 12px;
     text-align: center;
   }}
+  .detail {{ margin-top: 28px; }}
+  .detail h2 {{
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    margin: 0 0 12px;
+    color: var(--white);
+  }}
+  .detail h2 .accent {{ color: var(--gold); }}
+  .detail-controls {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }}
+  .detail-controls label {{
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }}
+  #player-select {{
+    background: var(--panel);
+    color: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    flex: 1;
+    max-width: 320px;
+  }}
+  #player-select:focus {{ outline: none; border-color: var(--gold); }}
+  td.round-cell {{ font-variant-numeric: tabular-nums; }}
+  td.running {{
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }}
+  th.running {{ text-align: right; }}
 </style>
 </head>
 <body>
@@ -117,8 +159,53 @@ _PAGE_TEMPLATE = """<!doctype html>
       </tbody>
     </table>
   </div>
+
+  <div class="detail">
+    <h2>Round-by-round <span class="accent">breakdown</span></h2>
+    <div class="detail-controls">
+      <label for="player-select">Player</label>
+      <select id="player-select">
+{options}
+      </select>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Round</th>
+            <th class="votes">Votes</th>
+            <th class="running">Season total</th>
+          </tr>
+        </thead>
+        <tbody id="detail-body"></tbody>
+      </table>
+    </div>
+  </div>
+
   <footer>Last updated {timestamp}</footer>
 </div>
+<script>
+const ROUND_VOTES = {round_votes_json};
+const select = document.getElementById("player-select");
+const body = document.getElementById("detail-body");
+function renderDetail(player) {{
+  const rows = ROUND_VOTES[player] || [];
+  let running = 0;
+  let out = "";
+  for (const r of rows) {{
+    running += r.votes;
+    out += "<tr><td class=\\"round-cell\\">" + r.round +
+           "</td><td class=\\"votes\\">" + r.votes +
+           "</td><td class=\\"running\\">" + running + "</td></tr>";
+  }}
+  if (!out) {{
+    out = "<tr><td class=\\"round-cell\\" colspan=\\"3\\">No rounds played yet.</td></tr>";
+  }}
+  body.innerHTML = out;
+}}
+select.addEventListener("change", function() {{ renderDetail(select.value); }});
+if (select.options.length > 0) {{ renderDetail(select.options[0].value); }}
+</script>
 </body>
 </html>
 """
@@ -133,7 +220,9 @@ _ROW_TEMPLATE = (
 )
 
 
-def render_leaderboard(leaderboard: pd.DataFrame, output_path: str) -> None:
+def render_leaderboard(
+    leaderboard: pd.DataFrame, round_votes: pd.DataFrame, output_path: str
+) -> None:
     top20 = leaderboard.head(20)
     rows = []
     for i, row in enumerate(top20.itertuples()):
@@ -158,7 +247,37 @@ def render_leaderboard(leaderboard: pd.DataFrame, output_path: str) -> None:
             )
         )
     rows_html = "\n".join(rows)
+
+    # Detail data is scoped to the top-20 players, listed in leaderboard order so
+    # the dropdown's first entry (and thus the default view) is the #1 player.
+    top20_players = [str(row.player) for row in top20.itertuples()]
+
+    # Build the per-player round list from round_votes, preserving its existing
+    # round ordering (per_round_votes already sorts numeric-then-finals).
+    round_data = {name: [] for name in top20_players}
+    for rv in round_votes.itertuples():
+        player = str(rv.player)
+        if player in round_data:
+            round_data[player].append(
+                {"round": str(rv.round), "votes": int(rv.votes)}
+            )
+    # json.dumps safely escapes strings for the JS/JSON context (no manual
+    # formatting), guarding against injection via player/round values.
+    round_votes_json = json.dumps(round_data)
+
+    options = "\n".join(
+        '        <option value="{name}">{name}</option>'.format(
+            name=html.escape(name)
+        )
+        for name in top20_players
+    )
+
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    html_doc = _PAGE_TEMPLATE.format(rows=rows_html, timestamp=timestamp)
+    html_doc = _PAGE_TEMPLATE.format(
+        rows=rows_html,
+        options=options,
+        round_votes_json=round_votes_json,
+        timestamp=timestamp,
+    )
     with open(output_path, "w") as f:
         f.write(html_doc)
