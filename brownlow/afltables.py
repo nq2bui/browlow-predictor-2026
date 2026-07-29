@@ -42,17 +42,35 @@ def parse_match_header(html: str) -> dict:
     date_match = re.search(r"Date:\s*\w+,\s*(\d{1,2}-\w{3}-\d{4})", text)
     parsed_date = datetime.strptime(date_match.group(1), "%d-%b-%Y").strftime("%Y-%m-%d")
 
-    team_links = [
-        a.get_text(strip=True)
-        for a in summary_table.find_all("a")
-        if "teams/" in a.get("href", "")
+    # The home/away team rows are the summary table's team-link rows: each has an
+    # <a href=".../teams/..."> link plus four <td align="center"> quarter cells,
+    # the last of which holds that team's final score in a <b> tag.
+    team_rows = [
+        tr
+        for tr in summary_table.find_all("tr")
+        if any("teams/" in a.get("href", "") for a in tr.find_all("a"))
     ]
+
+    def _team_name(tr):
+        return next(
+            a.get_text(strip=True)
+            for a in tr.find_all("a")
+            if "teams/" in a.get("href", "")
+        )
+
+    def _final_score(tr):
+        score_cells = tr.find_all("td", align="center")
+        return int(score_cells[-1].find("b").get_text(strip=True))
+
+    home_row, away_row = team_rows[0], team_rows[1]
 
     return {
         "round": round_match.group(1),
         "date": parsed_date,
-        "home_team": team_links[0],
-        "away_team": team_links[1],
+        "home_team": _team_name(home_row),
+        "away_team": _team_name(away_row),
+        "home_score": _final_score(home_row),
+        "away_score": _final_score(away_row),
     }
 
 

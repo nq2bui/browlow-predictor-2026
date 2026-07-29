@@ -15,6 +15,10 @@ STAT_COLUMNS = [
     "kicks", "handballs", "disposals", "marks", "goals", "behinds", "hitouts", "tackles",
     "clearances", "contested_possessions", "contested_marks", "goal_assists",
     "score_involvements", "intercepts",
+    # team_margin is appended last so the existing 14 columns keep their order.
+    # It captures the well-documented winning-team bias in Brownlow voting:
+    # the player's team's final score minus the opponent's for that match.
+    "team_margin",
 ]
 
 _FOOTYWIRE_ONLY_COLUMNS = ("score_involvements", "intercepts")
@@ -48,6 +52,17 @@ def assemble_match_records(
         normalized_name = normalize_player_name(row["player"])
         footywire_row = footywire_lookup.get((row["team"], normalized_name))
 
+        # Signed final-score margin from this player's team's perspective:
+        # positive if their team won, negative if they lost. Always available
+        # from afltables (unlike the footywire-only columns), so it's computed
+        # here rather than defaulting to 0 on a footywire miss.
+        if row["team"] == header["home_team"]:
+            team_margin = header["home_score"] - header["away_score"]
+        elif row["team"] == header["away_team"]:
+            team_margin = header["away_score"] - header["home_score"]
+        else:
+            team_margin = 0
+
         record = {
             "season": season,
             "round": header["round"],
@@ -58,7 +73,9 @@ def assemble_match_records(
             "brownlow_votes": row["brownlow_votes"],
         }
         for col in STAT_COLUMNS:
-            if col in _FOOTYWIRE_ONLY_COLUMNS:
+            if col == "team_margin":
+                record[col] = team_margin
+            elif col in _FOOTYWIRE_ONLY_COLUMNS:
                 record[col] = footywire_row[col] if footywire_row else 0
             else:
                 record[col] = row[col]

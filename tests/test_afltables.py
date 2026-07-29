@@ -35,7 +35,22 @@ def test_parse_match_header():
         "date": "2023-03-16",
         "home_team": "Richmond",
         "away_team": "Carlton",
+        # Richmond v Carlton R1 2023 was a real draw: both sides 8.10.58.
+        "home_score": 58,
+        "away_score": 58,
     }
+
+
+def test_parse_match_header_extracts_home_and_away_scores():
+    # Real captured page: Adelaide (home) v Hawthorn (away), R22 2025.
+    # Adelaide's last quarter cell final total is 15.11.101, Hawthorn's 13.9.87.
+    # Using a non-draw match proves home_score and away_score are read from the
+    # correct rows (home != away), which the drawn fixture above cannot show.
+    header = parse_match_header(MATCH_WITH_PLAYER_DETAILS_FIXTURE)
+    assert header["home_team"] == "Adelaide"
+    assert header["away_team"] == "Hawthorn"
+    assert header["home_score"] == 101
+    assert header["away_score"] == 87
 
 
 def test_parse_match_page_returns_rows_for_both_teams():

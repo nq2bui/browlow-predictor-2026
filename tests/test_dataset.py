@@ -5,15 +5,70 @@ from brownlow.dataset import assemble_match_records, rows_to_dataframe, STAT_COL
 
 AFLTABLES_FIXTURE = Path("tests/fixtures/afltables_match_sample.html").read_text()
 FOOTYWIRE_FIXTURE = Path("tests/fixtures/footywire_advanced_sample.html").read_text()
+# Real captured Adelaide (home, 101) v Hawthorn (away, 87) R22 2025 match page,
+# used to verify team_margin on a non-draw where home_score != away_score.
+ADELAIDE_HAWTHORN_FIXTURE = Path(
+    "tests/fixtures/afltables_match_with_player_details_sample.html"
+).read_text()
 
 
-def test_stat_columns_has_14_entries():
-    assert len(STAT_COLUMNS) == 14
+def test_stat_columns_has_15_entries():
+    assert len(STAT_COLUMNS) == 15
     assert STAT_COLUMNS[:8] == [
         "kicks", "handballs", "disposals", "marks",
         "goals", "behinds", "hitouts", "tackles",
     ]
-    assert STAT_COLUMNS[-2:] == ["score_involvements", "intercepts"]
+    # score_involvements/intercepts precede the new team_margin column, which is
+    # appended last so the existing 14 columns keep their ordering.
+    assert STAT_COLUMNS[-3:] == ["score_involvements", "intercepts", "team_margin"]
+
+
+def test_assemble_match_records_computes_team_margin_for_drawn_fixture():
+    # Richmond (home) v Carlton (away) R1 2023 was a real draw, both sides 58.
+    # So every player's team_margin is 0, and home/away branches must agree.
+    records = assemble_match_records(2023, "031420230316", AFLTABLES_FIXTURE, None)
+    bolton = next(r for r in records if r["player"] == "S. Bolton")  # Richmond (home)
+    cerra = next(r for r in records if r["player"] == "A. Cerra")  # Carlton (away)
+    assert bolton["team"] == "Richmond"
+    assert bolton["team_margin"] == 0  # 58 - 58
+    assert cerra["team"] == "Carlton"
+    assert cerra["team_margin"] == 0  # 58 - 58
+
+
+# A minimal, real Hawthorn Match Statistics table (Karl Amon, KI=15, from the
+# same real R22 2025 page). The captured fixture only kept Adelaide's stats
+# table, so we append this real away-team row to exercise the away (negative)
+# margin branch on a non-draw -- which the drawn Richmond/Carlton fixture and an
+# Adelaide-only (home) assertion cannot: it catches a hypothetical bug that
+# always computes home_score - away_score regardless of the player's team.
+_HAWTHORN_STATS_TABLE = """
+<table class="sortable"><thead>
+<tr><th colspan=25>Hawthorn Match Statistics</th></tr>
+<tr><th>#</th><th>Player</th><th>KI</th><th>MK</th><th>HB</th><th>DI</th><th>GL</th>
+<th>BH</th><th>HO</th><th>TK</th><th>RB</th><th>IF</th><th>CL</th><th>CG</th><th>FF</th>
+<th>FA</th><th>BR</th><th>CP</th><th>UP</th><th>CM</th><th>MI</th><th>1%</th><th>BO</th>
+<th>GA</th><th>%P</th></tr></thead><tbody>
+<tr><td>18</td><td><a href="../../players/K/Karl_Amon.html">Amon, Karl</a></td>
+<td>15</td><td>3</td><td>7</td><td>22</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+<td>2</td><td>3</td><td>1</td><td>1</td><td>2</td><td>&nbsp;</td><td>&nbsp;</td>
+<td>&nbsp;</td><td>5</td><td>17</td><td>&nbsp;</td><td>&nbsp;</td><td>2</td><td>&nbsp;</td>
+<td>&nbsp;</td><td>82</td></tr>
+</tbody></table>
+"""
+ADELAIDE_HAWTHORN_BOTH_TEAMS = ADELAIDE_HAWTHORN_FIXTURE + _HAWTHORN_STATS_TABLE
+
+
+def test_assemble_match_records_computes_signed_team_margin():
+    # Non-draw real match: Adelaide (home) 101, Hawthorn (away) 87.
+    # A home player's margin is home_score - away_score = +14; an away player's
+    # is away_score - home_score = -14. This proves the sign follows the team.
+    records = assemble_match_records(
+        2025, "011020250801", ADELAIDE_HAWTHORN_BOTH_TEAMS, None
+    )
+    adelaide = next(r for r in records if r["team"] == "Adelaide")
+    hawthorn = next(r for r in records if r["team"] == "Hawthorn")
+    assert adelaide["team_margin"] == 14
+    assert hawthorn["team_margin"] == -14
 
 
 def test_assemble_match_records_joins_footywire_stats():
