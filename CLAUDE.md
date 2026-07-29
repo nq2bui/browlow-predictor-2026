@@ -53,29 +53,36 @@ full data source research and rationale.
   on real 2026 votes as the season accumulates them, since early 2026 data,
   though small, is the only evidence of the actual new regime.
 
-- **Team-name mismatches between afltables and footywire are real and
-  measured, not just theoretical.** `brownlow/names.py` normalizes player
-  names only; the afltables→footywire join keys on raw team-name strings
-  (match-level lookup in `backfill_data.py`/`weekly_update.py`, and the
-  per-player join in `brownlow/dataset.py`). Verified against the real
-  2021-2025 backfill (46,782 rows, 1,017 matches): about **65% of player-rows
-  get real `score_involvements`/`intercepts` data**; the remaining ~35% is a
-  mix of match-level team-name mismatches (logged as `logger.warning`, e.g.
-  differing home/away conventions or aliases) and per-player misses (mostly
-  unused substitutes and footywire's arrow-suffixed sub markers, e.g. "N.
-  Vlastuin↗", which don't match afltables' plain name — `normalize_player_name`
-  doesn't strip these). This degrades 2 of the 14 features to 0 for the
-  affected rows; LightGBM handles the missingness but real join coverage is
-  worth improving. **Fast-follow:** strip footywire's ↗/↙ substitution
-  markers in `normalize_player_name`, and build a verified team-name alias
-  map for the mismatched cases.
+- **Team-name mismatches between afltables and footywire — RESOLVED.**
+  `brownlow/teams.py`'s `canonicalize_team_name` fixes the only 2 real
+  aliases that exist across all 18 AFL teams (verified by diffing the full
+  real team-name sets from both sites for the 2025 season): afltables
+  "Brisbane Lions" ↔ footywire "Brisbane", and afltables "Greater Western
+  Sydney" ↔ footywire "GWS". Applied at all 3 join points (`backfill_data.py`,
+  `weekly_update.py` match-level lookup, `brownlow/dataset.py` per-player
+  join). footywire's arrow-suffixed substitution markers (↗/↙, e.g. "N.
+  Vlastuin↗") are also now stripped in `parse_advanced_stats_page` before
+  name normalization. Verified against real data: a Brisbane Lions v Geelong
+  2025 match went from a 100% footywire miss to 44/46 players correctly
+  joined. The previously-measured ~65% join rate (on the pre-fix
+  2021-2025 backfill) should improve meaningfully once the full backfill is
+  re-run with this fix — re-measure after the next real backfill.
 
-- **Backtest hit rates remain modest even on the full 2012-2025 backfill**:
-  60% (2024 holdout) and 30% (2025 holdout) of actual top-20 vote-getters
-  were also in the model's predicted top-20, trained on 2012-2023
-  (~104k rows, up from 55%/25% on a smaller 2021-2023-only training run).
-  More history gave a real but modest improvement — accuracy is still
-  meaningfully below what a production model would want. Note `score_involvements`/
-  `intercepts` are 0 for all of 2012-2014 (these stats don't exist on
-  footywire before 2015 — see Data Sources), so roughly a fifth of the
-  training window has only 12 of the 14 features populated.
+- **New 15th feature: `team_margin`.** Captures Brownlow voting's
+  well-documented bias toward players on winning teams — `team_margin` is
+  this player's team's final score minus the opponent's (positive = win,
+  negative = loss, magnitude = margin), extracted from afltables' match
+  summary table via `parse_match_header`'s new `home_score`/`away_score`
+  fields. Unlike `score_involvements`/`intercepts`, this comes from
+  afltables directly and is available for every match regardless of the
+  footywire join outcome. `STAT_COLUMNS` (`brownlow/dataset.py`) is now 15
+  entries, not 14.
+
+- **Backtest hit rates were modest (60%/30% on 2024/2025 holdouts) on the
+  14-feature, pre-join-fix 2012-2025 backfill.** Re-measure after retraining
+  on the improved 15-feature, better-joined data — numbers above are stale
+  as of the join-gap fix and `team_margin` addition. Note `score_involvements`/
+  `intercepts` are still 0 for all of 2012-2014 regardless of the join fix
+  (these stats don't exist on footywire before 2015 at all — see Data
+  Sources), so roughly a fifth of the training window has only 13 of the
+  15 features populated.
