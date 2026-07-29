@@ -7,11 +7,11 @@ macOS users need `brew install libomp` before `pip install -r requirements.txt`,
 ## Overview
 
 Predicts the top 20 finishers in the 2026 AFL Brownlow Medal count. A
-LightGBM ranking model trained on historical data (currently 2021-2025;
-the original design target was 2012+, see Known Limitations), scored
-weekly against the current season and published as a static leaderboard —
-sibling project to `afl-tipster`, same single-repo + GitHub Actions
-cron pattern.
+LightGBM ranking model trained on 2012-2025 historical data (123,166 rows,
+2,753 matches), scored weekly against the current season and published as
+a static leaderboard — sibling project to `afl-tipster`, same single-repo
++ GitHub Actions cron pattern. See Known Limitations for backtest accuracy
+and the pre/post-2026 voting-rule caveat.
 
 ## Files
 
@@ -70,9 +70,12 @@ full data source research and rationale.
   markers in `normalize_player_name`, and build a verified team-name alias
   map for the mismatched cases.
 
-- **Backtest hit rates from the 2021-2025 backfill are modest**: 55% (2024
-  holdout) and 25% (2025 holdout) of actual top-20 vote-getters were also in
-  the model's predicted top-20, trained on only 2021-2023 (~27.7k rows) for
-  that evaluation. A larger historical window (the original 2012+ design
-  target) would likely improve this — deferred for v1 due to backfill runtime
-  (~1.5-2.5 hours for the full range vs ~15-20 min for 5 seasons).
+- **Backtest hit rates remain modest even on the full 2012-2025 backfill**:
+  60% (2024 holdout) and 30% (2025 holdout) of actual top-20 vote-getters
+  were also in the model's predicted top-20, trained on 2012-2023
+  (~104k rows, up from 55%/25% on a smaller 2021-2023-only training run).
+  More history gave a real but modest improvement — accuracy is still
+  meaningfully below what a production model would want. Note `score_involvements`/
+  `intercepts` are 0 for all of 2012-2014 (these stats don't exist on
+  footywire before 2015 — see Data Sources), so roughly a fifth of the
+  training window has only 12 of the 14 features populated.
