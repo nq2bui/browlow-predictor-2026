@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brownlow Predictor 2026</title>
+<style>
+  :root {
+    --grass: #0d1f0d;
+    --panel: #12261a;
+    --gold: #f0a500;
+    --gold-bright: #ffc940;
+    --white: #f5f0e8;
+    --muted: #7a9a7a;
+    --line: rgba(240, 165, 0, 0.14);
+    --row-line: rgba(255, 255, 255, 0.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--grass);
+    color: var(--white);
+    margin: 0;
+    min-height: 100vh;
+    padding: 40px 16px;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  h1 {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin: 0 0 4px;
+    color: var(--white);
+  }
+  h1 .accent { color: var(--gold); }
+  .subtitle { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(0, 0, 0, 0.25);
+  }
+  tbody td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--row-line);
+    vertical-align: middle;
+    font-size: 14px;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(240, 165, 0, 0.05); }
+  .rank {
+    color: var(--gold);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    width: 40px;
+    text-align: center;
+    border-left: 3px solid transparent;
+  }
+  .team-cell { }
+  .team-inner { display: flex; align-items: center; gap: 9px; }
+  .team-logo { width: 24px; height: 24px; object-fit: contain; flex-shrink: 0; }
+  .team-swatch {
+    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    background: var(--muted);
+  }
+  .player { font-weight: 600; color: var(--white); }
+  .votes {
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--gold-bright);
+  }
+  th.votes { text-align: right; }
+  footer {
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Brownlow <span class="accent">Predictor</span> 2026</h1>
+  <p class="subtitle">Predicted top 20, updated after each round.</p>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th class="rank">#</th>
+          <th>Player</th>
+          <th>Team</th>
+          <th class="votes">Predicted votes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="rank" style="border-left-color: #000000;">1</td><td class="player">N. Daicos</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/COL.png" alt="Collingwood logo"><span>Collingwood</span></span></td><td class="votes">38.6</td></tr>
+        <tr><td class="rank" style="border-left-color: #1C3C63;">2</td><td class="player">B. Smith</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/GEE.png" alt="Geelong logo"><span>Geelong</span></span></td><td class="votes">14.9</td></tr>
+        <tr><td class="rank" style="border-left-color: #ED171F;">3</td><td class="player">I. Heeney</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/SYD.png" alt="Sydney logo"><span>Sydney</span></span></td><td class="votes">10.9</td></tr>
+        <tr><td class="rank" style="border-left-color: #013B9F;">4</td><td class="player">H. Sheezel</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/NTH.png" alt="North Melbourne logo"><span>North Melbourne</span></span></td><td class="votes">9.6</td></tr>
+        <tr><td class="rank" style="border-left-color: #014896;">5</td><td class="player">M. Bontempelli</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/WBD.png" alt="Western Bulldogs logo"><span>Western Bulldogs</span></span></td><td class="votes">8.7</td></tr>
+        <tr><td class="rank" style="border-left-color: #FF7900;">6</td><td class="player">C. Oliver</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/GWS.png" alt="Greater Western Sydney logo"><span>Greater Western Sydney</span></span></td><td class="votes">6.7</td></tr>
+        <tr><td class="rank" style="border-left-color: #ED0F05;">7</td><td class="player">N. Wanganeen-Milera</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/STK.png" alt="St Kilda logo"><span>St Kilda</span></span></td><td class="votes">6.0</td></tr>
+        <tr><td class="rank" style="border-left-color: #008AAB;">8</td><td class="player">Z. Butters</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/POR.png" alt="Port Adelaide logo"><span>Port Adelaide</span></span></td><td class="votes">5.2</td></tr>
+        <tr><td class="rank" style="border-left-color: #A30046;">9</td><td class="player">L. Neale</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/BRI.png" alt="Brisbane Lions logo"><span>Brisbane Lions</span></span></td><td class="votes">3.0</td></tr>
+        <tr><td class="rank" style="border-left-color: #CC2031;">10</td><td class="player">M. Gawn</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/MEL.png" alt="Melbourne logo"><span>Melbourne</span></span></td><td class="votes">-0.6</td></tr>
+        <tr><td class="rank" style="border-left-color: #002B5C;">11</td><td class="player">J. Dawson</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/ADE.png" alt="Adelaide logo"><span>Adelaide</span></span></td><td class="votes">-1.3</td></tr>
+        <tr><td class="rank" style="border-left-color: #1C3C63;">12</td><td class="player">R. Stanley</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/GEE.png" alt="Geelong logo"><span>Geelong</span></span></td><td class="votes">-3.2</td></tr>
+        <tr><td class="rank" style="border-left-color: #1C3C63;">13</td><td class="player">M. Holmes</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/GEE.png" alt="Geelong logo"><span>Geelong</span></span></td><td class="votes">-3.9</td></tr>
+        <tr><td class="rank" style="border-left-color: #4D2004;">14</td><td class="player">H. Hustwaite</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/HAW.png" alt="Hawthorn logo"><span>Hawthorn</span></span></td><td class="votes">-4.4</td></tr>
+        <tr><td class="rank" style="border-left-color: #0E1E2D;">15</td><td class="player">P. Cripps</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/CAR.png" alt="Carlton logo"><span>Carlton</span></span></td><td class="votes">-4.8</td></tr>
+        <tr><td class="rank" style="border-left-color: #008AAB;">16</td><td class="player">W. Brodie</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/POR.png" alt="Port Adelaide logo"><span>Port Adelaide</span></span></td><td class="votes">-5.0</td></tr>
+        <tr><td class="rank" style="border-left-color: #014896;">17</td><td class="player">L. Vandermeer</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/WBD.png" alt="Western Bulldogs logo"><span>Western Bulldogs</span></span></td><td class="votes">-5.0</td></tr>
+        <tr><td class="rank" style="border-left-color: #0E1E2D;">18</td><td class="player">F. Riley</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/CAR.png" alt="Carlton logo"><span>Carlton</span></span></td><td class="votes">-5.2</td></tr>
+        <tr><td class="rank" style="border-left-color: #008AAB;">19</td><td class="player">W. Lorenz</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/POR.png" alt="Port Adelaide logo"><span>Port Adelaide</span></span></td><td class="votes">-5.7</td></tr>
+        <tr><td class="rank" style="border-left-color: #013B9F;">20</td><td class="player">Z. Fisher</td><td class="team-cell"><span class="team-inner"><img class="team-logo" src="logos/NTH.png" alt="North Melbourne logo"><span>North Melbourne</span></span></td><td class="votes">-5.8</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <footer>Last updated 2026-07-29 03:30 UTC</footer>
+</div>
+</body>
+</html>
