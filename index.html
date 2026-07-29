@@ -89,6 +89,47 @@
     font-size: 12px;
     text-align: center;
   }
+  .detail { margin-top: 28px; }
+  .detail h2 {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    margin: 0 0 12px;
+    color: var(--white);
+  }
+  .detail h2 .accent { color: var(--gold); }
+  .detail-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .detail-controls label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  #player-select {
+    background: var(--panel);
+    color: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    flex: 1;
+    max-width: 320px;
+  }
+  #player-select:focus { outline: none; border-color: var(--gold); }
+  td.round-cell { font-variant-numeric: tabular-nums; }
+  td.running {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  th.running { text-align: right; }
 </style>
 </head>
 <body>
@@ -129,7 +170,71 @@
       </tbody>
     </table>
   </div>
-  <footer>Last updated 2026-07-29 04:24 UTC</footer>
+
+  <div class="detail">
+    <h2>Round-by-round <span class="accent">breakdown</span></h2>
+    <div class="detail-controls">
+      <label for="player-select">Player</label>
+      <select id="player-select">
+        <option value="N. Daicos">N. Daicos</option>
+        <option value="H. Sheezel">H. Sheezel</option>
+        <option value="P. Cripps">P. Cripps</option>
+        <option value="M. Bontempelli">M. Bontempelli</option>
+        <option value="B. Smith">B. Smith</option>
+        <option value="Z. Butters">Z. Butters</option>
+        <option value="C. Oliver">C. Oliver</option>
+        <option value="L. Neale">L. Neale</option>
+        <option value="I. Heeney">I. Heeney</option>
+        <option value="W. Ashcroft">W. Ashcroft</option>
+        <option value="N. Anderson">N. Anderson</option>
+        <option value="J. Horne-Francis">J. Horne-Francis</option>
+        <option value="J. Newcombe">J. Newcombe</option>
+        <option value="J. Gunston">J. Gunston</option>
+        <option value="N. Wanganeen-Milera">N. Wanganeen-Milera</option>
+        <option value="M. Holmes">M. Holmes</option>
+        <option value="Z. Bailey">Z. Bailey</option>
+        <option value="E. Richards">E. Richards</option>
+        <option value="K. Pickett">K. Pickett</option>
+        <option value="Z. Merrett">Z. Merrett</option>
+      </select>
+    </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Round</th>
+            <th class="votes">Votes</th>
+            <th class="running">Season total</th>
+          </tr>
+        </thead>
+        <tbody id="detail-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>Last updated 2026-07-29 10:16 UTC</footer>
 </div>
+<script>
+const ROUND_VOTES = {"N. Daicos": [{"round": "1", "votes": 3}, {"round": "2", "votes": 3}, {"round": "4", "votes": 3}, {"round": "6", "votes": 3}, {"round": "7", "votes": 3}, {"round": "8", "votes": 2}, {"round": "9", "votes": 1}, {"round": "10", "votes": 0}, {"round": "11", "votes": 0}, {"round": "12", "votes": 3}, {"round": "13", "votes": 3}, {"round": "14", "votes": 3}, {"round": "16", "votes": 3}, {"round": "17", "votes": 3}, {"round": "18", "votes": 3}, {"round": "19", "votes": 0}, {"round": "20", "votes": 2}, {"round": "21", "votes": 3}], "H. Sheezel": [{"round": "2", "votes": 2}, {"round": "3", "votes": 2}, {"round": "4", "votes": 3}, {"round": "5", "votes": 2}, {"round": "6", "votes": 2}, {"round": "7", "votes": 3}, {"round": "8", "votes": 1}, {"round": "9", "votes": 0}, {"round": "10", "votes": 1}, {"round": "11", "votes": 0}, {"round": "12", "votes": 2}, {"round": "14", "votes": 0}, {"round": "15", "votes": 3}, {"round": "16", "votes": 2}, {"round": "17", "votes": 3}, {"round": "18", "votes": 3}, {"round": "19", "votes": 0}, {"round": "20", "votes": 2}, {"round": "21", "votes": 1}], "P. Cripps": [{"round": "1", "votes": 0}, {"round": "2", "votes": 3}, {"round": "4", "votes": 0}, {"round": "5", "votes": 0}, {"round": "6", "votes": 2}, {"round": "7", "votes": 0}, {"round": "8", "votes": 1}, {"round": "9", "votes": 0}, {"round": "10", "votes": 2}, {"round": "11", "votes": 3}, {"round": "12", "votes": 2}, {"round": "13", "votes": 3}, {"round": "14", "votes": 0}, {"round": "16", "votes": 3}, {"round": "17", "votes": 3}, {"round": "18", "votes": 0}, {"round": "19", "votes": 0}, {"round": "20", "votes": 3}, {"round": "21", "votes": 3}], "M. Bontempelli": [{"round": "1", "votes": 0}, {"round": "2", "votes": 3}, {"round": "3", "votes": 2}, {"round": "5", "votes": 2}, {"round": "6", "votes": 0}, {"round": "7", "votes": 0}, {"round": "8", "votes": 2}, {"round": "9", "votes": 3}, {"round": "10", "votes": 3}, {"round": "11", "votes": 0}, {"round": "12", "votes": 2}, {"round": "13", "votes": 0}, {"round": "14", "votes": 1}, {"round": "15", "votes": 0}, {"round": "16", "votes": 3}, {"round": "18", "votes": 0}, {"round": "19", "votes": 2}, {"round": "20", "votes": 2}, {"round": "21", "votes": 2}], "B. Smith": [{"round": "1", "votes": 0}, {"round": "2", "votes": 0}, {"round": "4", "votes": 3}, {"round": "5", "votes": 3}, {"round": "6", "votes": 3}, {"round": "7", "votes": 2}, {"round": "8", "votes": 1}, {"round": "9", "votes": 0}, {"round": "10", "votes": 3}, {"round": "11", "votes": 2}, {"round": "12", "votes": 1}, {"round": "13", "votes": 2}, {"round": "14", "votes": 1}, {"round": "15", "votes": 0}, {"round": "18", "votes": 2}, {"round": "19", "votes": 0}, {"round": "20", "votes": 2}, {"round": "21", "votes": 0}], "Z. Butters": [{"round": "2", "votes": 0}, {"round": "3", "votes": 3}, {"round": "4", "votes": 3}, {"round": "5", "votes": 2}, {"round": "6", "votes": 2}, {"round": "7", "votes": 3}, {"round": "8", "votes": 0}, {"round": "9", "votes": 0}, {"round": "10", "votes": 2}, {"round": "11", "votes": 3}, {"round": "12", "votes": 0}, {"round": "14", "votes": 0}, {"round": "15", "votes": 2}, {"round": "16", "votes": 0}, {"round": "17", "votes": 3}, {"round": "18", "votes": 0}, {"round": "19", "votes": 0}], "C. Oliver": [{"round": "1", "votes": 1}, {"round": "2", "votes": 0}, {"round": "3", "votes": 2}, {"round": "4", "votes": 1}, {"round": "6", "votes": 1}, {"round": "7", "votes": 3}, {"round": "8", "votes": 0}, {"round": "9", "votes": 1}, {"round": "10", "votes": 0}, {"round": "11", "votes": 2}, {"round": "12", "votes": 3}, {"round": "13", "votes": 0}, {"round": "15", "votes": 2}, {"round": "16", "votes": 0}, {"round": "17", "votes": 3}, {"round": "18", "votes": 1}, {"round": "19", "votes": 2}, {"round": "20", "votes": 0}, {"round": "21", "votes": 0}], "L. Neale": [{"round": "1", "votes": 2}, {"round": "2", "votes": 1}, {"round": "4", "votes": 0}, {"round": "5", "votes": 1}, {"round": "6", "votes": 3}, {"round": "7", "votes": 2}, {"round": "8", "votes": 3}, {"round": "9", "votes": 0}, {"round": "10", "votes": 3}, {"round": "11", "votes": 0}, {"round": "12", "votes": 0}, {"round": "13", "votes": 0}, {"round": "14", "votes": 2}, {"round": "15", "votes": 0}, {"round": "17", "votes": 0}, {"round": "18", "votes": 0}, {"round": "19", "votes": 2}, {"round": "20", "votes": 1}, {"round": "21", "votes": 0}], "I. Heeney": [{"round": "1", "votes": 0}, {"round": "2", "votes": 0}, {"round": "5", "votes": 3}, {"round": "6", "votes": 3}, {"round": "7", "votes": 0}, {"round": "9", "votes": 1}, {"round": "10", "votes": 2}, {"round": "11", "votes": 2}, {"round": "12", "votes": 0}, {"round": "13", "votes": 2}, {"round": "14", "votes": 3}, {"round": "15", "votes": 1}, {"round": "17", "votes": 1}, {"round": "18", "votes": 0}, {"round": "19", "votes": 0}, {"round": "20", "votes": 0}, {"round": "21", "votes": 0}], "W. Ashcroft": [{"round": "1", "votes": 0}, {"round": "2", "votes": 0}, {"round": "4", "votes": 3}, {"round": "5", "votes": 3}, {"round": "6", "votes": 0}, {"round": "7", "votes": 0}, {"round": "8", "votes": 1}, {"round": "9", "votes": 0}, {"round": "10", "votes": 0}, {"round": "11", "votes": 0}, {"round": "12", "votes": 0}, {"round": "13", "votes": 0}, {"round": "14", "votes": 0}, {"round": "15", "votes": 3}, {"round": "17", "votes": 2}, {"round": "18", "votes": 1}, {"round": "19", "votes": 3}, {"round": "20", "votes": 0}, {"round": "21", "votes": 2}], "N. Anderson": [{"round": "1", "votes": 0}, {"round": "2", "votes": 3}, {"round": "3", "votes": 0}, {"round": "5", "votes": 0}, {"round": "6", "votes": 0}, {"round": "8", "votes": 1}, {"round": "9", "votes": 0}, {"round": "10", "votes": 2}, {"round": "11", "votes": 1}, {"round": "12", "votes": 1}, {"round": "14", "votes": 0}, {"round": "15", "votes": 3}, {"round": "16", "votes": 2}, {"round": "17", "votes": 2}, {"round": "18", "votes": 0}, {"round": "19", "votes": 0}, {"round": "20", "votes": 0}, {"round": "21", "votes": 2}], "J. Horne-Francis": [{"round": "2", "votes": 0}, {"round": "3", "votes": 2}, {"round": "4", "votes": 0}, {"round": "5", "votes": 0}, {"round": "6", "votes": 1}, {"round": "7", "votes": 2}, {"round": "8", "votes": 3}, {"round": "9", "votes": 0}, {"round": "10", "votes": 0}, {"round": "11", "votes": 0}, {"round": "12", "votes": 3}, {"round": "14", "votes": 1}, {"round": "15", "votes": 0}, {"round": "16", "votes": 1}, {"round": "17", "votes": 1}, {"round": "18", "votes": 1}, {"round": "19", "votes": 0}, {"round": "21", "votes": 1}], "J. Newcombe": [{"round": "1", "votes": 0}, {"round": "2", "votes": 0}, {"round": "3", "votes": 3}, {"round": "5", "votes": 0}, {"round": "6", "votes": 3}, {"round": "7", "votes": 0}, {"round": "8", "votes": 2}, {"round": "9", "votes": 2}, {"round": "10", "votes": 0}, {"round": "11", "votes": 0}, {"round": "12", "votes": 0}, {"round": "13", "votes": 0}, {"round": "14", "votes": 3}, {"round": "16", "votes": 3}, {"round": "17", "votes": 0}, {"round": "18", "votes": 0}, {"round": "19", "votes": 0}, {"round": "20", "votes": 0}, {"round": "21", "votes": 0}], "J. Gunston": [{"round": "1", "votes": 0}, {"round": "2", "votes": 3}, {"round": "3", "votes": 1}, {"round": "5", "votes": 0}, {"round": "6", "votes": 0}, {"round": "8", "votes": 3}, {"round": "9", "votes": 0}, {"round": "10", "votes": 3}, {"round": "13", "votes": 2}, {"round": "18", "votes": 0}, {"round": "19", "votes": 0}, {"round": "20", "votes": 0}, {"round": "21", "votes": 3}], "N. Wanganeen-Milera": [{"round": "1", "votes": 0}, {"round": "2", "votes": 0}, {"round": "3", "votes": 0}, {"round": "4", "votes": 1}, {"round": "6", "votes": 3}, {"round": "7", "votes": 0}, {"round": "8", "votes": 2}, {"round": "9", "votes": 2}, {"round": "14", "votes": 0}, {"round": "15", "votes": 1}, {"round": "16", "votes": 1}, {"round": "18", "votes": 2}, {"round": "19", "votes": 0}, {"round": "20", "votes": 0}, {"round": "21", "votes": 3}], "M. Holmes": [{"round": "1", "votes": 1}, {"round": "2", "votes": 2}, {"round": "4", "votes": 1}, {"round": "5", "votes": 1}, {"round": "6", "votes": 0}, {"round": "7", "votes": 0}, {"round": "8", "votes": 0}, {"round": "9", "votes": 2}, {"round": "10", "votes": 2}, {"round": "11", "votes": 0}, {"round": "12", "votes": 3}, {"round": "13", "votes": 0}, {"round": "14", "votes": 0}, {"round": "15", "votes": 2}, {"round": "16", "votes": 0}, {"round": "18", "votes": 0}, {"round": "19", "votes": 0}, {"round": "20", "votes": 0}], "Z. Bailey": [{"round": "1", "votes": 0}, {"round": "4", "votes": 0}, {"round": "5", "votes": 2}, {"round": "6", "votes": 0}, {"round": "7", "votes": 0}, {"round": "8", "votes": 2}, {"round": "9", "votes": 2}, {"round": "10", "votes": 0}, {"round": "11", "votes": 0}, {"round": "12", "votes": 0}, {"round": "13", "votes": 3}, {"round": "14", "votes": 0}, {"round": "15", "votes": 1}, {"round": "17", "votes": 0}, {"round": "18", "votes": 0}, {"round": "19", "votes": 1}, {"round": "20", "votes": 0}, {"round": "21", "votes": 3}], "E. Richards": [{"round": "1", "votes": 3}, {"round": "2", "votes": 0}, {"round": "3", "votes": 0}, {"round": "6", "votes": 0}, {"round": "7", "votes": 1}, {"round": "8", "votes": 0}, {"round": "9", "votes": 0}, {"round": "10", "votes": 0}, {"round": "11", "votes": 0}, {"round": "12", "votes": 3}, {"round": "13", "votes": 0}, {"round": "14", "votes": 0}, {"round": "15", "votes": 1}, {"round": "16", "votes": 0}, {"round": "18", "votes": 1}, {"round": "19", "votes": 1}, {"round": "20", "votes": 0}, {"round": "21", "votes": 3}], "K. Pickett": [{"round": "2", "votes": 0}, {"round": "3", "votes": 0}, {"round": "4", "votes": 3}, {"round": "5", "votes": 1}, {"round": "6", "votes": 0}, {"round": "7", "votes": 0}, {"round": "8", "votes": 3}, {"round": "9", "votes": 0}, {"round": "10", "votes": 0}, {"round": "11", "votes": 0}, {"round": "12", "votes": 0}, {"round": "13", "votes": 0}, {"round": "14", "votes": 2}, {"round": "15", "votes": 3}, {"round": "16", "votes": 0}, {"round": "18", "votes": 0}, {"round": "19", "votes": 0}, {"round": "20", "votes": 1}, {"round": "21", "votes": 0}], "Z. Merrett": [{"round": "2", "votes": 2}, {"round": "3", "votes": 0}, {"round": "4", "votes": 0}, {"round": "5", "votes": 0}, {"round": "6", "votes": 1}, {"round": "7", "votes": 3}, {"round": "8", "votes": 0}, {"round": "9", "votes": 0}, {"round": "10", "votes": 0}, {"round": "11", "votes": 0}, {"round": "12", "votes": 2}, {"round": "13", "votes": 0}, {"round": "14", "votes": 2}, {"round": "15", "votes": 0}, {"round": "17", "votes": 0}, {"round": "18", "votes": 0}, {"round": "19", "votes": 0}, {"round": "20", "votes": 3}, {"round": "21", "votes": 0}]};
+const select = document.getElementById("player-select");
+const body = document.getElementById("detail-body");
+function renderDetail(player) {
+  const rows = ROUND_VOTES[player] || [];
+  let running = 0;
+  let out = "";
+  for (const r of rows) {
+    running += r.votes;
+    out += "<tr><td class=\"round-cell\">" + r.round +
+           "</td><td class=\"votes\">" + r.votes +
+           "</td><td class=\"running\">" + running + "</td></tr>";
+  }
+  if (!out) {
+    out = "<tr><td class=\"round-cell\" colspan=\"3\">No rounds played yet.</td></tr>";
+  }
+  body.innerHTML = out;
+}
+select.addEventListener("change", function() { renderDetail(select.value); });
+if (select.options.length > 0) { renderDetail(select.options[0].value); }
+</script>
 </body>
 </html>
