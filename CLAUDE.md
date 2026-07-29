@@ -4,6 +4,8 @@
 
 macOS users need `brew install libomp` before `pip install -r requirements.txt`, or LightGBM's native library fails to load on import.
 
+After `pip install -r requirements.txt`, run `python -m playwright install chromium` to download the headless browser Playwright drives to render the Sportsbet Brownlow odds page (the pip install only installs the Playwright Python package, not the browser binary). `weekly_update.py` degrades gracefully to no odds if the browser or fetch fails.
+
 ## Overview
 
 Predicts the top 20 finishers in the 2026 AFL Brownlow Medal count. A
@@ -37,6 +39,17 @@ full data source research and rationale.
 - Plan: `docs/superpowers/plans/2026-07-27-brownlow-predictor.md`
 
 ## Known Limitations
+
+- **Sportsbet odds scraping and Terms of Service.** The leaderboard displays
+  live Sportsbet Brownlow Medal odds (decimal odds + implied probability) next
+  to each top-20 player, fetched by rendering the operator's page with a
+  headless browser (`brownlow/odds.py`). Sportsbet is a regulated Australian
+  gambling operator, and automated scraping of their site likely conflicts with
+  their Terms of Service, even though the page's `robots.txt` does not explicitly
+  disallow this path. This was a deliberate, informed decision by the project
+  owner, not an oversight. The odds are a display-only, current-moment feature
+  (no historical odds are stored, and odds are not a model/training feature); a
+  fetch failure degrades gracefully to no odds and never blocks the weekly update.
 
 - **Pre-2026 training data reflects pre-2026 voting behavior.** Every
   historical Brownlow vote in `data/training_data.parquet` (2021-2025) was

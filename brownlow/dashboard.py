@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+from brownlow.odds import implied_probability
 from brownlow.teams import get_team_info
 
 _PAGE_TEMPLATE = """<!doctype html>
@@ -91,6 +92,19 @@ _PAGE_TEMPLATE = """<!doctype html>
     color: var(--gold-bright);
   }}
   th.votes {{ text-align: right; }}
+  .odds {{
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--white);
+    font-weight: 600;
+  }}
+  th.odds {{ text-align: right; }}
+  .implied {{
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }}
+  th.implied {{ text-align: right; }}
   footer {{
     margin-top: 18px;
     color: var(--muted);
@@ -152,6 +166,8 @@ _PAGE_TEMPLATE = """<!doctype html>
           <th>Player</th>
           <th>Team</th>
           <th class="votes">Predicted votes</th>
+          <th class="odds">Odds</th>
+          <th class="implied">Implied %</th>
         </tr>
       </thead>
       <tbody>
@@ -216,13 +232,25 @@ _ROW_TEMPLATE = (
     '<td class="player">{player}</td>'
     '<td class="team-cell"><span class="team-inner">{logo}<span>{team}</span></span></td>'
     '<td class="votes">{votes:.1f}</td>'
+    '<td class="odds">{odds}</td>'
+    '<td class="implied">{implied}</td>'
     '</tr>'
 )
 
+# Placeholder for a leaderboard player not present in the Sportsbet market.
+_NO_ODDS = "—"
+
 
 def render_leaderboard(
-    leaderboard: pd.DataFrame, round_votes: pd.DataFrame, output_path: str
+    leaderboard: pd.DataFrame,
+    round_votes: pd.DataFrame,
+    odds: list[dict],
+    output_path: str,
 ) -> None:
+    # Index odds by the already-normalized "F. Surname" join key so a direct
+    # string match against the (identically normalized) leaderboard player works.
+    odds_by_player = {o["player"]: o["decimal_odds"] for o in odds}
+
     top20 = leaderboard.head(20)
     rows = []
     for i, row in enumerate(top20.itertuples()):
@@ -236,6 +264,15 @@ def render_leaderboard(
             )
         else:
             logo = '<span class="team-swatch"></span>'
+
+        decimal_odds = odds_by_player.get(str(row.player))
+        if decimal_odds is None:
+            odds_display = _NO_ODDS
+            implied_display = _NO_ODDS
+        else:
+            odds_display = "${:.2f}".format(decimal_odds)
+            implied_display = "{:.0f}%".format(implied_probability(decimal_odds))
+
         rows.append(
             _ROW_TEMPLATE.format(
                 rank=i + 1,
@@ -244,6 +281,8 @@ def render_leaderboard(
                 votes=row.predicted_season_votes,
                 color=info["color"],
                 logo=logo,
+                odds=odds_display,
+                implied=implied_display,
             )
         )
     rows_html = "\n".join(rows)

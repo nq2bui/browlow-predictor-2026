@@ -24,6 +24,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Install Playwright browser
+        # Playwright's chromium binary is not a pip package -- it needs this
+        # separate install step (same requirement locally). Used to render the
+        # JS-heavy Sportsbet odds page for the leaderboard's odds columns.
+        run: python -m playwright install --with-deps chromium
+
       - name: Run weekly update
         run: python weekly_update.py
 

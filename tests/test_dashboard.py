@@ -22,7 +22,7 @@ def test_render_leaderboard_writes_top_20_table(tmp_path):
     round_votes = _round_votes_for([f"Player{i}" for i in range(25)])
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, str(output_path))
+    render_leaderboard(leaderboard, round_votes, [], str(output_path))
 
     html = output_path.read_text()
     assert "Player0" in html
@@ -62,9 +62,39 @@ def test_render_leaderboard_omits_logo_for_unknown_team(tmp_path):
     round_votes = _round_votes_for(["Nobody"])
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, str(output_path))
+    render_leaderboard(leaderboard, round_votes, [], str(output_path))
 
     html = output_path.read_text()
     # Unknown team degrades gracefully: no broken logo <img>, neutral swatch instead.
     assert "logos/" not in html
     assert "team-swatch" in html
+
+
+def test_render_leaderboard_shows_odds_columns_and_placeholder(tmp_path):
+    leaderboard = pd.DataFrame({
+        "player": ["N. Daicos", "M. Bontempelli", "J. Nomatch"],
+        "team": ["Collingwood", "Western Bulldogs", "Richmond"],
+        "predicted_season_votes": [30.0, 25.0, 20.0],
+    })
+    round_votes = _round_votes_for(["N. Daicos", "M. Bontempelli", "J. Nomatch"])
+    # Odds carried on the already-normalized "F. Surname" join key. J. Nomatch is
+    # deliberately absent from the market to exercise the placeholder path.
+    odds = [
+        {"player": "N. Daicos", "decimal_odds": 1.20},
+        {"player": "M. Bontempelli", "decimal_odds": 10.00},
+    ]
+    output_path = tmp_path / "index.html"
+
+    render_leaderboard(leaderboard, round_votes, odds, str(output_path))
+
+    html = output_path.read_text()
+    # New column headers present.
+    assert "Odds" in html
+    assert "Implied %" in html
+    # Matched player: raw decimal odds and implied probability both rendered.
+    assert "$1.20" in html
+    assert "83%" in html  # 1/1.20*100 = 83.33 -> 83%
+    assert "$10.00" in html
+    assert "10%" in html
+    # Unmatched leaderboard player shows an em-dash placeholder, not a crash/blank.
+    assert "—" in html

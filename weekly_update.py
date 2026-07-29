@@ -15,6 +15,7 @@ from brownlow.dataset import assemble_match_records
 from brownlow.model import load_model
 from brownlow.weekly import accumulate_season_votes, per_round_votes
 from brownlow.dashboard import render_leaderboard
+from brownlow.odds import fetch_odds_page_html, parse_brownlow_odds
 from brownlow.http import fetch_url
 from brownlow.teams import canonicalize_team_name
 
@@ -116,7 +117,18 @@ def main():
     # exactly those players (same head(20) convention) to keep it cheap.
     top_20_players = leaderboard.head(20)["player"].tolist()
     round_votes = per_round_votes(model, season_df, top_20_players)
-    render_leaderboard(leaderboard, round_votes, OUTPUT_PATH)
+
+    # Sportsbet Brownlow odds are a nice-to-have display feature, not core to the
+    # prediction. A fetch failure (SPA render timeout, page change, missing
+    # browser) must never crash the weekly update -- degrade gracefully to no
+    # odds, same pattern as the per-match try/except elsewhere in the pipeline.
+    try:
+        odds = parse_brownlow_odds(fetch_odds_page_html())
+    except Exception as e:
+        logger.warning("could not fetch/parse Sportsbet Brownlow odds, continuing without them: %s", e)
+        odds = []
+
+    render_leaderboard(leaderboard, round_votes, odds, OUTPUT_PATH)
     logger.info("wrote updated leaderboard to %s (%d players)", OUTPUT_PATH, len(leaderboard))
 
 
