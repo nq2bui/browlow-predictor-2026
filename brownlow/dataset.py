@@ -7,6 +7,7 @@ import pandas as pd
 from brownlow.afltables import parse_match_header, parse_match_page
 from brownlow.footywire import parse_advanced_stats_page
 from brownlow.names import normalize_player_name
+from brownlow.teams import canonicalize_team_name
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,10 @@ def assemble_match_records(
     footywire_lookup = {}
     if footywire_html:
         for row in parse_advanced_stats_page(footywire_html):
-            key = (row["team"], normalize_player_name(row["player"]))
+            # footywire's team spelling can be an alias of afltables' (e.g.
+            # "Brisbane" vs "Brisbane Lions"); canonicalize it so the join key
+            # matches afltables' side, which already uses the canonical spelling.
+            key = (canonicalize_team_name(row["team"]), normalize_player_name(row["player"]))
             footywire_lookup[key] = row
 
     afltables_keys = {(row["team"], normalize_player_name(row["player"])) for row in afltables_rows}

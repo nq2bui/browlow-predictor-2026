@@ -54,6 +54,43 @@ def fake_fetch_aligned(url: str) -> str:
     return fake_fetch(url)
 
 
+# afltables spells the home club "Brisbane Lions"; footywire spells it "Brisbane"
+# in BOTH its match-list (used for the match-level lookup) and its advanced-stats
+# page title (used for the per-player join). We relabel the afltables side to
+# "Brisbane Lions" and the footywire side to "Brisbane", and align a player, so
+# the whole join chain must survive the alias to succeed.
+AFLTABLES_MATCH_BRISBANE = AFLTABLES_MATCH.replace("Richmond", "Brisbane Lions")
+FOOTYWIRE_MATCH_LIST_BRISBANE = FOOTYWIRE_MATCH_LIST.replace(">Richmond<", ">Brisbane<")
+FOOTYWIRE_ADV_BRISBANE = FOOTYWIRE_ADV.replace(
+    "Sydney Match Statistics", "Brisbane Match Statistics"
+).replace(">O Florent<", ">S Bolton<")
+
+
+def fake_fetch_brisbane_alias(url: str) -> str:
+    if url == MATCH_URL:
+        return AFLTABLES_MATCH_BRISBANE
+    if url == SEASON_MATCH_LIST_URL_TEMPLATE.format(year=2023):
+        return FOOTYWIRE_MATCH_LIST_BRISBANE
+    if url == MATCH_STATS_URL_TEMPLATE.format(mid=10751):
+        return FOOTYWIRE_ADV_BRISBANE
+    return fake_fetch(url)
+
+
+def test_backfill_joins_across_team_name_alias():
+    # End-to-end proof that the Brisbane Lions / Brisbane alias no longer breaks
+    # the join. afltables says "Brisbane Lions"; footywire says "Brisbane" for
+    # both the match-level (home_team/away_team) lookup and the per-player team
+    # key. Without canonicalization the match-level lookup misses entirely and
+    # every Brisbane player falls back to 0. With it, the footywire stats flow
+    # through to the matching afltables player.
+    df = backfill_seasons(2023, 2023, fetch=fake_fetch_brisbane_alias)
+
+    bolton = df[(df["team"] == "Brisbane Lions") & (df["player"] == "S. Bolton")]
+    assert len(bolton) == 1
+    assert bolton["score_involvements"].iloc[0] == 7
+    assert bolton["intercepts"].iloc[0] == 2
+
+
 def test_backfill_joins_footywire_stats_into_matching_player():
     # Prove the "successful join" path: a footywire stat actually flows into the
     # matching afltables player's row with a nonzero value. mid=10751 maps to the

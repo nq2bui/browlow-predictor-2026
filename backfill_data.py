@@ -18,6 +18,7 @@ from brownlow.footywire import (
 )
 from brownlow.dataset import assemble_match_records
 from brownlow.http import fetch_url
+from brownlow.teams import canonicalize_team_name
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +64,15 @@ def backfill_seasons(start_season: int, end_season: int, fetch=fetch_url) -> pd.
 
         footywire_html_by_teams = {}
         for match in footywire_matches:
+            # Key on the canonical (afltables) team spelling so the lookup below
+            # -- done with afltables' header team names -- matches even for the
+            # clubs footywire spells differently (Brisbane, GWS).
+            key = (
+                canonicalize_team_name(match["home_team"]),
+                canonicalize_team_name(match["away_team"]),
+            )
             try:
-                footywire_html_by_teams[(match["home_team"], match["away_team"])] = fetch(
+                footywire_html_by_teams[key] = fetch(
                     MATCH_STATS_URL_TEMPLATE.format(mid=match["mid"])
                 )
             except Exception as e:

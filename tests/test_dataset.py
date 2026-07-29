@@ -48,6 +48,35 @@ def test_assemble_match_records_without_footywire_data():
     assert all(r["score_involvements"] == 0 and r["intercepts"] == 0 for r in records)
 
 
+def test_assemble_match_records_joins_across_team_name_alias():
+    # afltables spells the club "Brisbane Lions"; footywire spells it "Brisbane".
+    # The per-player join keys on (team, normalized_name), so without team-name
+    # canonicalization a Brisbane Lions player never matches their footywire row
+    # and loses score_involvements/intercepts. Here we (a) retitle the footywire
+    # block to the footywire alias "Brisbane" and rename its top player to line
+    # up with an afltables player, then (b) retitle the afltables team to
+    # "Brisbane Lions" so the two sources disagree exactly as the real sites do.
+    # After canonicalization the footywire "Brisbane" row joins onto afltables'
+    # "Brisbane Lions" player with the real nonzero SI/ITC.
+    afltables_html = AFLTABLES_FIXTURE.replace("Richmond", "Brisbane Lions")
+    footywire_html = FOOTYWIRE_FIXTURE.replace(
+        "<a name=t1></a>Sydney Match Statistics",
+        "<a name=t1></a>Brisbane Match Statistics",  # footywire's alias spelling
+    ).replace(
+        'title="Oliver Florent">O Florent</a>',
+        'title="Shai Bolton">S Bolton</a>',  # -> "S. Bolton", an afltables player
+    )
+
+    records = assemble_match_records(2023, "031420230316", afltables_html, footywire_html)
+
+    bolton = next(r for r in records if r["player"] == "S. Bolton")
+    assert bolton["team"] == "Brisbane Lions"  # canonical afltables spelling kept
+    # These flow from the footywire "Brisbane" O-Florent row (SI=7, ITC=2) that
+    # only joins because "Brisbane" was canonicalized to "Brisbane Lions".
+    assert bolton["score_involvements"] == 7
+    assert bolton["intercepts"] == 2
+
+
 def test_rows_to_dataframe_has_expected_columns():
     records = assemble_match_records(2023, "031420230316", AFLTABLES_FIXTURE, None)
     df = rows_to_dataframe(records)

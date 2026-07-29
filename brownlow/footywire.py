@@ -40,7 +40,14 @@ def parse_advanced_stats_page(html: str) -> list[dict]:
 
         for tr in table.find_all("tr", class_=["darkcolor", "lightcolor"]):
             tds = tr.find_all("td")
-            player = tds[0].get_text(strip=True)
+            # footywire suffixes a substituted player's name with an arrow marker
+            # directly appended with no separator: U+2197 (↗, subbed ON) or
+            # U+2199 (↙, subbed OFF), e.g. "N Vlastuin↗". afltables carries no
+            # such marker, so these names never matched on the (team, name) join
+            # key and silently lost their SI/ITC. Strip the trailing arrow (and
+            # any surrounding whitespace) before the name is used, so it
+            # normalizes identically to afltables' plain name.
+            player = tds[0].get_text(strip=True).rstrip("↗↙").strip()
             values = [td.get_text(strip=True) for td in tds[1:]]
             # A player named as an emergency/substitute who never took the field
             # gets a short "Unused Substitute" row: just the name and a single

@@ -3,6 +3,12 @@ from pathlib import Path
 from brownlow.footywire import parse_advanced_stats_page, list_season_match_ids
 
 ADV_FIXTURE = Path("tests/fixtures/footywire_advanced_sample.html").read_text()
+# Real footywire pattern: a substituted player's name carries a trailing arrow
+# marker directly appended with no separator -- U+2197 (↗, subbed ON) or U+2199
+# (↙, subbed OFF). We reproduce it by suffixing the arrow onto a real player row
+# in the base fixture, mirroring the exact live-page shape (e.g. "N Vlastuin↗").
+FOOTYWIRE_SUB_ARROW_FIXTURE_ON = ADV_FIXTURE.replace(">O Florent<", ">N Vlastuin↗<")
+FOOTYWIRE_SUB_ARROW_FIXTURE_OFF = ADV_FIXTURE.replace(">J Lloyd<", ">J Ross↙<")
 MATCH_LIST_FIXTURE = Path("tests/fixtures/footywire_match_list_sample.html").read_text()
 # The base match-list fixture plus two real "noise" rows (Change Password /
 # Update Settings account widgets) extracted from a real captured live page
@@ -115,6 +121,32 @@ def test_parse_advanced_stats_page_older_page_without_si_itc_columns():
     assert jack["team"] == "Sydney"
     assert jack["score_involvements"] == 0
     assert jack["intercepts"] == 0
+
+
+def test_parse_advanced_stats_page_strips_substitution_arrow_markers():
+    # footywire suffixes a player's name with an arrow when they were
+    # substituted during the match: U+2197 (↗, subbed ON) or U+2199 (↙, subbed
+    # OFF), appended directly to the name with no separator (e.g. "N Vlastuin↗").
+    # afltables carries no such marker, so these names never matched on the join
+    # key and silently lost their score_involvements/intercepts. The parser must
+    # strip the trailing arrow (and surrounding whitespace) BEFORE the name is
+    # used, so "N Vlastuin↗" -> "N Vlastuin" normalizes identically to
+    # afltables' "Vlastuin, Nathan" -> "N. Vlastuin".
+    subbed_on = FOOTYWIRE_SUB_ARROW_FIXTURE_ON  # "O Florent" renamed "N Vlastuin↗"
+    rows = parse_advanced_stats_page(subbed_on)
+    players = {r["player"] for r in rows}
+    assert "N Vlastuin" in players  # arrow stripped
+    assert "N Vlastuin↗" not in players  # raw arrow-suffixed name gone
+    vlastuin = next(r for r in rows if r["player"] == "N Vlastuin")
+    # Stats still parse correctly for the stripped row (from the O Florent row).
+    assert vlastuin["score_involvements"] == 7
+    assert vlastuin["intercepts"] == 2
+
+    subbed_off = FOOTYWIRE_SUB_ARROW_FIXTURE_OFF  # "J Lloyd" renamed "J Ross↙"
+    rows_off = parse_advanced_stats_page(subbed_off)
+    players_off = {r["player"] for r in rows_off}
+    assert "J Ross" in players_off  # ↙ stripped too
+    assert "J Ross↙" not in players_off
 
 
 def test_list_season_match_ids():

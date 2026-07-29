@@ -33,6 +33,28 @@ TEAM_INFO = {
 
 _FALLBACK = {"code": "", "color": "#666666"}
 
+# footywire spells two clubs differently from afltables. Verified by diffing the
+# full real team-name sets from both sites across the whole 2025 season: these
+# are the ONLY two aliases -- the other 16 clubs are spelled identically by both.
+# Keys are footywire's spelling; values are the canonical afltables spelling
+# (the one TEAM_INFO / the join keys use). Add future aliases here as needed.
+_TEAM_NAME_ALIASES = {
+    "Brisbane": "Brisbane Lions",
+    "GWS": "Greater Western Sydney",
+}
+
+
+def canonicalize_team_name(name: str) -> str:
+    """Map a known team-name alias to its canonical (afltables) spelling.
+
+    footywire and afltables disagree on exactly two club names; this normalizes
+    footywire's spelling onto afltables' so both sides of every afltables↔
+    footywire join compare equal. Any name not in the alias map (the 16
+    identically-spelled clubs, or anything unrecognized) is returned unchanged,
+    so this is always a safe no-op passthrough rather than a lookup that fails.
+    """
+    return _TEAM_NAME_ALIASES.get(name, name)
+
 
 def get_team_info(team_name: str) -> dict:
     """Return ``{"code", "color"}`` for ``team_name``.
