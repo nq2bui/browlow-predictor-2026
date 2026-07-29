@@ -78,11 +78,21 @@ full data source research and rationale.
   footywire join outcome. `STAT_COLUMNS` (`brownlow/dataset.py`) is now 15
   entries, not 14.
 
-- **Backtest hit rates were modest (60%/30% on 2024/2025 holdouts) on the
-  14-feature, pre-join-fix 2012-2025 backfill.** Re-measure after retraining
-  on the improved 15-feature, better-joined data — numbers above are stale
-  as of the join-gap fix and `team_margin` addition. Note `score_involvements`/
-  `intercepts` are still 0 for all of 2012-2014 regardless of the join fix
-  (these stats don't exist on footywire before 2015 at all — see Data
-  Sources), so roughly a fifth of the training window has only 13 of the
-  15 features populated.
+- **Backtest hit rates on the improved 15-feature, better-joined 2012-2025
+  data: 50% (2024 holdout), 25% (2025 holdout)** — both very slightly LOWER
+  than the pre-fix 14-feature run (60%/30%). This is not read as evidence the
+  join-gap fix or `team_margin` made things worse: `team_margin` is the
+  model's 4th-highest feature by gain (`model.feature_importance("gain")`),
+  well above several stats that were already trusted (contested_possessions,
+  hitouts, score_involvements, clearances), so it's genuinely being used,
+  not noise. The top-20 hit-rate backtest compares against only ~20 real
+  players per holdout season — a couple of rank swaps swings the percentage
+  by 5-10 points, so a single before/after comparison at this sample size
+  isn't strong evidence either way. Shipped as-is (decided 2026-07-30)
+  since the underlying data quality is objectively better (join rate) and
+  the new feature has real, measured signal — but treat both this number
+  and the 60%/30% one it replaced as noisy, not as a reliable trend.
+  Note `score_involvements`/`intercepts` are still 0 for all of 2012-2014
+  regardless of the join fix (these stats don't exist on footywire before
+  2015 at all — see Data Sources), so roughly a fifth of the training
+  window has only 13 of the 15 features populated.
