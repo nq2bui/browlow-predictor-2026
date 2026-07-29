@@ -20,6 +20,12 @@ _COLUMN_TO_FIELD = {
 }
 
 SEASON_INDEX_URL_TEMPLATE = "https://afltables.com/afl/brownlow/brownlow{year}rbr.html"
+# General season-results page. Unlike the Brownlow round-by-round page above
+# (which afltables only publishes after a season concludes), this page exists
+# and carries real match links for an in-progress season. Same
+# `href="../stats/games/..."` link format, so list_season_match_urls parses it
+# unchanged; used as a fallback when the round-by-round page 404s.
+SEASON_RESULTS_URL_TEMPLATE = "https://afltables.com/afl/seas/{year}.html"
 
 
 def match_id_from_url(url: str) -> str:

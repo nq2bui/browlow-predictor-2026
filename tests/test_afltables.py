@@ -17,6 +17,15 @@ SEASON_INDEX_FIXTURE = Path(
 MATCH_WITH_PLAYER_DETAILS_FIXTURE = Path(
     "tests/fixtures/afltables_match_with_player_details_sample.html"
 ).read_text()
+# Built programmatically from a real fetch of the general season-results page
+# https://afltables.com/afl/seas/2026.html (the in-progress 2026 season). Its
+# per-match markup differs from the Brownlow round-by-round page, but carries
+# the same href="../stats/games/..." links, so list_season_match_urls must
+# handle it too -- this is the fallback source weekly_update.py/backfill_data.py
+# use when the round-by-round page 404s mid-season.
+SEASON_RESULTS_FIXTURE = Path(
+    "tests/fixtures/afltables_season_results_sample.html"
+).read_text()
 
 
 def test_parse_match_header():
@@ -132,4 +141,18 @@ def test_list_season_match_urls():
         "https://afltables.com/afl/stats/games/2023/031420230316.html",
         "https://afltables.com/afl/stats/games/2023/040920230317.html",
         "https://afltables.com/afl/stats/games/2023/121820230318.html",
+    ]
+
+
+def test_list_season_match_urls_parses_season_results_page():
+    # Regression guard: list_season_match_urls must parse the general
+    # season-results page (afl/seas/{year}.html) format too, not just the
+    # Brownlow round-by-round page. weekly_update.py and backfill_data.py fall
+    # back to this page for in-progress seasons whose round-by-round page 404s.
+    # If someone tightens the regex to the round-by-round layout, this fails.
+    urls = list_season_match_urls(SEASON_RESULTS_FIXTURE)
+    assert urls == [
+        "https://afltables.com/afl/stats/games/2026/031620260305.html",
+        "https://afltables.com/afl/stats/games/2026/092020260306.html",
+        "https://afltables.com/afl/stats/games/2026/102120260307.html",
     ]

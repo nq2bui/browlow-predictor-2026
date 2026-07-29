@@ -6,6 +6,7 @@ import pandas as pd
 
 from brownlow.afltables import (
     SEASON_INDEX_URL_TEMPLATE,
+    SEASON_RESULTS_URL_TEMPLATE,
     list_season_match_urls,
     match_id_from_url,
     parse_match_header,
@@ -27,8 +28,26 @@ def backfill_seasons(start_season: int, end_season: int, fetch=fetch_url) -> pd.
         try:
             index_html = fetch(SEASON_INDEX_URL_TEMPLATE.format(year=season))
         except Exception as e:
-            logger.warning("could not fetch season index for %s, skipping season: %s", season, e)
-            continue
+            # The Brownlow round-by-round page only appears once a season
+            # concludes; fall back to the general season-results page (same
+            # match-link format) so a very recent or in-progress season can
+            # still be backfilled. Mirrors weekly_update.py's fallback.
+            logger.warning(
+                "could not fetch Brownlow round-by-round index for %s (%s), "
+                "falling back to season-results page",
+                season,
+                e,
+            )
+            try:
+                index_html = fetch(SEASON_RESULTS_URL_TEMPLATE.format(year=season))
+            except Exception as e2:
+                logger.warning(
+                    "could not fetch season-results page for %s either, "
+                    "skipping season: %s",
+                    season,
+                    e2,
+                )
+                continue
 
         match_urls = list_season_match_urls(index_html)
 

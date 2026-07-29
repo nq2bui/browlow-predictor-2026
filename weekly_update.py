@@ -5,6 +5,7 @@ import pandas as pd
 
 from brownlow.afltables import (
     SEASON_INDEX_URL_TEMPLATE,
+    SEASON_RESULTS_URL_TEMPLATE,
     list_season_match_urls,
     match_id_from_url,
     parse_match_header,
@@ -27,8 +28,26 @@ def build_current_season_dataframe(season: int, fetch=fetch_url) -> pd.DataFrame
     try:
         index_html = fetch(SEASON_INDEX_URL_TEMPLATE.format(year=season))
     except Exception as e:
-        logger.error("could not fetch season index for %s, aborting weekly update: %s", season, e)
-        return pd.DataFrame()
+        # The Brownlow round-by-round page only appears once a season concludes,
+        # so for an in-progress season it 404s. Fall back to the general
+        # season-results page, which exists mid-season and carries the same
+        # match-link format that list_season_match_urls already parses.
+        logger.warning(
+            "could not fetch Brownlow round-by-round index for %s (%s), "
+            "falling back to season-results page",
+            season,
+            e,
+        )
+        try:
+            index_html = fetch(SEASON_RESULTS_URL_TEMPLATE.format(year=season))
+        except Exception as e2:
+            logger.error(
+                "could not fetch season-results page for %s either, aborting "
+                "weekly update: %s",
+                season,
+                e2,
+            )
+            return pd.DataFrame()
 
     match_urls = list_season_match_urls(index_html)
 
