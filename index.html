@@ -165,7 +165,7 @@
     text-transform: uppercase;
     color: var(--muted);
   }
-  #player-select {
+  #team-select {
     background: var(--panel);
     color: var(--white);
     border: 1px solid var(--line);
@@ -176,14 +176,18 @@
     flex: 1;
     max-width: 320px;
   }
-  #player-select:focus { outline: none; border-color: var(--gold); }
-  td.round-cell { font-variant-numeric: tabular-nums; }
-  td.running {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    color: var(--muted);
+  #team-select:focus { outline: none; border-color: var(--gold); }
+  /* Selected-team logo shown beside the "Team tally" heading; swapped by the
+     vanilla-JS handler on each selection. Reuses the logos/{code}.png assets
+     via brownlow/teams.py's team codes. */
+  .detail h2 .team-logo-lg {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    vertical-align: -6px;
+    margin-right: 8px;
   }
-  th.running { text-align: right; }
+  td.team-player { font-weight: 600; color: var(--white); }
   .nav-link { margin: 0 0 24px; font-size: 14px; }
   .nav-link a { color: var(--gold); text-decoration: none; font-weight: 600; }
   .nav-link a:hover { text-decoration: underline; }
@@ -204,7 +208,7 @@
   <h1>Brownlow <span class="accent">Predictor</span> 2026</h1>
   <p class="subtitle">Predicted top 20, updated after each round.</p>
   <p class="nav-link"><a href="rounds.html">View round-by-round matrix for all 20 &rarr;</a></p>
-  <div id="stale-banner" class="stale-banner" role="alert" style="display: none;" data-generated-at="2026-07-30T12:04:31Z">&#9888;&#65039; This leaderboard hasn't updated in over 10 days &mdash; the data may be stale</div>
+  <div id="stale-banner" class="stale-banner" role="alert" style="display: none;" data-generated-at="2026-07-30T12:47:39Z">&#9888;&#65039; This leaderboard hasn't updated in over 10 days &mdash; the data may be stale</div>
   <div class="card">
     <div class="table-scroll">
     <table id="leaderboard-table">
@@ -245,69 +249,77 @@
   </div>
 
   <div class="detail">
-    <h2>Round-by-round <span class="accent">breakdown</span></h2>
+    <h2><img id="team-logo" class="team-logo-lg" src="" alt="" style="display: none;">Team <span class="accent">tally</span></h2>
     <div class="detail-controls">
-      <label for="player-select">Player</label>
-      <select id="player-select">
-        <option value="N. Daicos">N. Daicos</option>
-        <option value="B. Smith">B. Smith</option>
-        <option value="H. Sheezel">H. Sheezel</option>
-        <option value="M. Bontempelli">M. Bontempelli</option>
-        <option value="P. Cripps">P. Cripps</option>
-        <option value="W. Ashcroft">W. Ashcroft</option>
-        <option value="I. Heeney">I. Heeney</option>
-        <option value="L. Neale">L. Neale</option>
-        <option value="C. Oliver">C. Oliver</option>
-        <option value="J. Newcombe">J. Newcombe</option>
-        <option value="L. Jackson">L. Jackson</option>
-        <option value="B. Grundy">B. Grundy</option>
-        <option value="N. Wanganeen-Milera">N. Wanganeen-Milera</option>
-        <option value="M. Holmes">M. Holmes</option>
-        <option value="J. Horne-Francis">J. Horne-Francis</option>
-        <option value="Z. Butters">Z. Butters</option>
-        <option value="K. Pickett">K. Pickett</option>
-        <option value="J. Dawson">J. Dawson</option>
-        <option value="Z. Bailey">Z. Bailey</option>
-        <option value="A. Brayshaw">A. Brayshaw</option>
+      <label for="team-select">Team</label>
+      <select id="team-select">
+        <option value="Adelaide">Adelaide</option>
+        <option value="Brisbane Lions">Brisbane Lions</option>
+        <option value="Carlton">Carlton</option>
+        <option value="Collingwood" selected>Collingwood</option>
+        <option value="Essendon">Essendon</option>
+        <option value="Fremantle">Fremantle</option>
+        <option value="Geelong">Geelong</option>
+        <option value="Gold Coast">Gold Coast</option>
+        <option value="Greater Western Sydney">Greater Western Sydney</option>
+        <option value="Hawthorn">Hawthorn</option>
+        <option value="Melbourne">Melbourne</option>
+        <option value="North Melbourne">North Melbourne</option>
+        <option value="Port Adelaide">Port Adelaide</option>
+        <option value="Richmond">Richmond</option>
+        <option value="St Kilda">St Kilda</option>
+        <option value="Sydney">Sydney</option>
+        <option value="Western Bulldogs">Western Bulldogs</option>
+        <option value="West Coast">West Coast</option>
       </select>
     </div>
     <div class="card">
       <table>
         <thead>
           <tr>
-            <th>Round</th>
-            <th class="votes">Votes</th>
-            <th class="running">Season total</th>
+            <th>Player</th>
+            <th class="votes">Predicted votes</th>
           </tr>
         </thead>
-        <tbody id="detail-body"></tbody>
+        <tbody id="team-body"></tbody>
       </table>
     </div>
   </div>
 
-  <footer>Last updated 2026-07-30 12:04 UTC</footer>
+  <footer>Last updated 2026-07-30 12:47 UTC</footer>
 </div>
 <script>
-const ROUND_VOTES = {"N. Daicos": [{"round": "Opening Round", "votes": 3}, {"round": "Round 1", "votes": 3}, {"round": "Round 3", "votes": 3}, {"round": "Round 5", "votes": 2}, {"round": "Round 6", "votes": 3}, {"round": "Round 7", "votes": 3}, {"round": "Round 8", "votes": 2}, {"round": "Round 9", "votes": 0}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 3}, {"round": "Round 12", "votes": 3}, {"round": "Round 13", "votes": 2}, {"round": "Round 15", "votes": 3}, {"round": "Round 16", "votes": 3}, {"round": "Round 17", "votes": 3}, {"round": "Round 18", "votes": 1}, {"round": "Round 19", "votes": 3}, {"round": "Round 20", "votes": 3}], "B. Smith": [{"round": "Opening Round", "votes": 0}, {"round": "Round 1", "votes": 1}, {"round": "Round 3", "votes": 3}, {"round": "Round 4", "votes": 3}, {"round": "Round 5", "votes": 3}, {"round": "Round 6", "votes": 2}, {"round": "Round 7", "votes": 0}, {"round": "Round 8", "votes": 0}, {"round": "Round 9", "votes": 3}, {"round": "Round 10", "votes": 3}, {"round": "Round 11", "votes": 2}, {"round": "Round 12", "votes": 2}, {"round": "Round 13", "votes": 2}, {"round": "Round 14", "votes": 2}, {"round": "Round 17", "votes": 0}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 2}, {"round": "Round 20", "votes": 2}], "H. Sheezel": [{"round": "Round 1", "votes": 3}, {"round": "Round 2", "votes": 3}, {"round": "Round 3", "votes": 3}, {"round": "Round 4", "votes": 2}, {"round": "Round 5", "votes": 1}, {"round": "Round 6", "votes": 3}, {"round": "Round 7", "votes": 0}, {"round": "Round 8", "votes": 0}, {"round": "Round 9", "votes": 1}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 1}, {"round": "Round 13", "votes": 0}, {"round": "Round 14", "votes": 3}, {"round": "Round 15", "votes": 2}, {"round": "Round 16", "votes": 3}, {"round": "Round 17", "votes": 3}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 1}, {"round": "Round 20", "votes": 0}], "M. Bontempelli": [{"round": "Opening Round", "votes": 0}, {"round": "Round 1", "votes": 3}, {"round": "Round 2", "votes": 2}, {"round": "Round 4", "votes": 3}, {"round": "Round 5", "votes": 0}, {"round": "Round 6", "votes": 0}, {"round": "Round 7", "votes": 0}, {"round": "Round 8", "votes": 2}, {"round": "Round 9", "votes": 3}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 2}, {"round": "Round 12", "votes": 0}, {"round": "Round 13", "votes": 1}, {"round": "Round 14", "votes": 0}, {"round": "Round 15", "votes": 3}, {"round": "Round 17", "votes": 0}, {"round": "Round 18", "votes": 3}, {"round": "Round 19", "votes": 3}, {"round": "Round 20", "votes": 2}], "P. Cripps": [{"round": "Opening Round", "votes": 0}, {"round": "Round 1", "votes": 3}, {"round": "Round 3", "votes": 0}, {"round": "Round 4", "votes": 0}, {"round": "Round 5", "votes": 0}, {"round": "Round 6", "votes": 0}, {"round": "Round 7", "votes": 2}, {"round": "Round 8", "votes": 0}, {"round": "Round 9", "votes": 2}, {"round": "Round 10", "votes": 3}, {"round": "Round 11", "votes": 3}, {"round": "Round 12", "votes": 3}, {"round": "Round 13", "votes": 0}, {"round": "Round 15", "votes": 2}, {"round": "Round 16", "votes": 3}, {"round": "Round 17", "votes": 1}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 2}, {"round": "Round 20", "votes": 3}], "W. Ashcroft": [{"round": "Opening Round", "votes": 0}, {"round": "Round 1", "votes": 0}, {"round": "Round 3", "votes": 3}, {"round": "Round 4", "votes": 3}, {"round": "Round 5", "votes": 0}, {"round": "Round 6", "votes": 0}, {"round": "Round 7", "votes": 1}, {"round": "Round 8", "votes": 0}, {"round": "Round 9", "votes": 0}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 0}, {"round": "Round 12", "votes": 0}, {"round": "Round 13", "votes": 0}, {"round": "Round 14", "votes": 3}, {"round": "Round 16", "votes": 3}, {"round": "Round 17", "votes": 3}, {"round": "Round 18", "votes": 3}, {"round": "Round 19", "votes": 2}, {"round": "Round 20", "votes": 3}], "I. Heeney": [{"round": "Opening Round", "votes": 1}, {"round": "Round 1", "votes": 0}, {"round": "Round 4", "votes": 3}, {"round": "Round 5", "votes": 3}, {"round": "Round 6", "votes": 1}, {"round": "Round 8", "votes": 1}, {"round": "Round 9", "votes": 3}, {"round": "Round 10", "votes": 1}, {"round": "Round 11", "votes": 0}, {"round": "Round 12", "votes": 3}, {"round": "Round 13", "votes": 3}, {"round": "Round 14", "votes": 3}, {"round": "Round 16", "votes": 0}, {"round": "Round 17", "votes": 1}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 0}, {"round": "Round 20", "votes": 0}], "L. Neale": [{"round": "Opening Round", "votes": 2}, {"round": "Round 1", "votes": 0}, {"round": "Round 3", "votes": 0}, {"round": "Round 4", "votes": 1}, {"round": "Round 5", "votes": 3}, {"round": "Round 6", "votes": 2}, {"round": "Round 7", "votes": 3}, {"round": "Round 8", "votes": 0}, {"round": "Round 9", "votes": 3}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 0}, {"round": "Round 12", "votes": 0}, {"round": "Round 13", "votes": 2}, {"round": "Round 14", "votes": 1}, {"round": "Round 16", "votes": 0}, {"round": "Round 17", "votes": 0}, {"round": "Round 18", "votes": 2}, {"round": "Round 19", "votes": 3}, {"round": "Round 20", "votes": 0}], "C. Oliver": [{"round": "Opening Round", "votes": 2}, {"round": "Round 1", "votes": 0}, {"round": "Round 2", "votes": 2}, {"round": "Round 3", "votes": 0}, {"round": "Round 5", "votes": 2}, {"round": "Round 6", "votes": 0}, {"round": "Round 7", "votes": 0}, {"round": "Round 8", "votes": 0}, {"round": "Round 9", "votes": 0}, {"round": "Round 10", "votes": 2}, {"round": "Round 11", "votes": 3}, {"round": "Round 12", "votes": 1}, {"round": "Round 14", "votes": 1}, {"round": "Round 15", "votes": 0}, {"round": "Round 16", "votes": 2}, {"round": "Round 17", "votes": 1}, {"round": "Round 18", "votes": 3}, {"round": "Round 19", "votes": 0}, {"round": "Round 20", "votes": 0}], "J. Newcombe": [{"round": "Opening Round", "votes": 0}, {"round": "Round 1", "votes": 0}, {"round": "Round 2", "votes": 3}, {"round": "Round 4", "votes": 1}, {"round": "Round 5", "votes": 3}, {"round": "Round 6", "votes": 0}, {"round": "Round 7", "votes": 3}, {"round": "Round 8", "votes": 1}, {"round": "Round 9", "votes": 0}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 0}, {"round": "Round 12", "votes": 0}, {"round": "Round 13", "votes": 2}, {"round": "Round 15", "votes": 3}, {"round": "Round 16", "votes": 3}, {"round": "Round 17", "votes": 0}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 0}, {"round": "Round 20", "votes": 0}], "L. Jackson": [{"round": "Round 1", "votes": 3}, {"round": "Round 2", "votes": 0}, {"round": "Round 3", "votes": 0}, {"round": "Round 4", "votes": 0}, {"round": "Round 5", "votes": 3}, {"round": "Round 6", "votes": 0}, {"round": "Round 7", "votes": 1}, {"round": "Round 8", "votes": 1}, {"round": "Round 9", "votes": 3}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 2}, {"round": "Round 12", "votes": 0}, {"round": "Round 13", "votes": 1}, {"round": "Round 15", "votes": 3}, {"round": "Round 16", "votes": 0}, {"round": "Round 17", "votes": 0}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 0}, {"round": "Round 20", "votes": 0}], "B. Grundy": [{"round": "Opening Round", "votes": 0}, {"round": "Round 1", "votes": 0}, {"round": "Round 2", "votes": 0}, {"round": "Round 4", "votes": 2}, {"round": "Round 5", "votes": 1}, {"round": "Round 6", "votes": 3}, {"round": "Round 7", "votes": 2}, {"round": "Round 8", "votes": 2}, {"round": "Round 9", "votes": 0}, {"round": "Round 10", "votes": 3}, {"round": "Round 11", "votes": 0}, {"round": "Round 13", "votes": 0}, {"round": "Round 14", "votes": 2}, {"round": "Round 16", "votes": 0}, {"round": "Round 17", "votes": 2}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 0}, {"round": "Round 20", "votes": 0}], "N. Wanganeen-Milera": [{"round": "Opening Round", "votes": 0}, {"round": "Round 1", "votes": 0}, {"round": "Round 2", "votes": 0}, {"round": "Round 3", "votes": 0}, {"round": "Round 5", "votes": 3}, {"round": "Round 6", "votes": 0}, {"round": "Round 7", "votes": 2}, {"round": "Round 8", "votes": 2}, {"round": "Round 13", "votes": 0}, {"round": "Round 14", "votes": 2}, {"round": "Round 15", "votes": 1}, {"round": "Round 17", "votes": 3}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 0}, {"round": "Round 20", "votes": 3}], "M. Holmes": [{"round": "Opening Round", "votes": 0}, {"round": "Round 1", "votes": 2}, {"round": "Round 3", "votes": 1}, {"round": "Round 4", "votes": 0}, {"round": "Round 5", "votes": 1}, {"round": "Round 6", "votes": 1}, {"round": "Round 7", "votes": 0}, {"round": "Round 8", "votes": 3}, {"round": "Round 9", "votes": 2}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 3}, {"round": "Round 12", "votes": 0}, {"round": "Round 13", "votes": 0}, {"round": "Round 14", "votes": 3}, {"round": "Round 15", "votes": 0}, {"round": "Round 17", "votes": 0}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 0}], "J. Horne-Francis": [{"round": "Round 1", "votes": 0}, {"round": "Round 2", "votes": 2}, {"round": "Round 3", "votes": 0}, {"round": "Round 4", "votes": 0}, {"round": "Round 5", "votes": 1}, {"round": "Round 6", "votes": 1}, {"round": "Round 7", "votes": 3}, {"round": "Round 8", "votes": 0}, {"round": "Round 9", "votes": 0}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 2}, {"round": "Round 13", "votes": 3}, {"round": "Round 14", "votes": 0}, {"round": "Round 15", "votes": 1}, {"round": "Round 16", "votes": 2}, {"round": "Round 17", "votes": 1}, {"round": "Round 18", "votes": 0}, {"round": "Round 20", "votes": 0}], "Z. Butters": [{"round": "Round 1", "votes": 0}, {"round": "Round 2", "votes": 3}, {"round": "Round 3", "votes": 2}, {"round": "Round 4", "votes": 2}, {"round": "Round 5", "votes": 0}, {"round": "Round 6", "votes": 3}, {"round": "Round 7", "votes": 1}, {"round": "Round 8", "votes": 0}, {"round": "Round 9", "votes": 0}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 0}, {"round": "Round 13", "votes": 2}, {"round": "Round 14", "votes": 0}, {"round": "Round 15", "votes": 0}, {"round": "Round 16", "votes": 3}, {"round": "Round 17", "votes": 0}, {"round": "Round 18", "votes": 0}], "K. Pickett": [{"round": "Round 1", "votes": 0}, {"round": "Round 2", "votes": 0}, {"round": "Round 3", "votes": 3}, {"round": "Round 4", "votes": 1}, {"round": "Round 5", "votes": 0}, {"round": "Round 6", "votes": 0}, {"round": "Round 7", "votes": 3}, {"round": "Round 8", "votes": 0}, {"round": "Round 9", "votes": 0}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 0}, {"round": "Round 12", "votes": 0}, {"round": "Round 13", "votes": 3}, {"round": "Round 14", "votes": 3}, {"round": "Round 15", "votes": 0}, {"round": "Round 17", "votes": 0}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 2}, {"round": "Round 20", "votes": 0}], "J. Dawson": [{"round": "Round 1", "votes": 0}, {"round": "Round 2", "votes": 0}, {"round": "Round 4", "votes": 0}, {"round": "Round 5", "votes": 1}, {"round": "Round 7", "votes": 0}, {"round": "Round 9", "votes": 1}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 3}, {"round": "Round 13", "votes": 3}, {"round": "Round 14", "votes": 3}, {"round": "Round 15", "votes": 0}, {"round": "Round 16", "votes": 0}, {"round": "Round 17", "votes": 3}, {"round": "Round 18", "votes": 1}, {"round": "Round 19", "votes": 0}, {"round": "Round 20", "votes": 0}], "Z. Bailey": [{"round": "Opening Round", "votes": 0}, {"round": "Round 3", "votes": 0}, {"round": "Round 4", "votes": 2}, {"round": "Round 5", "votes": 2}, {"round": "Round 6", "votes": 0}, {"round": "Round 7", "votes": 2}, {"round": "Round 8", "votes": 3}, {"round": "Round 9", "votes": 0}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 0}, {"round": "Round 12", "votes": 1}, {"round": "Round 13", "votes": 0}, {"round": "Round 14", "votes": 2}, {"round": "Round 16", "votes": 0}, {"round": "Round 17", "votes": 0}, {"round": "Round 18", "votes": 1}, {"round": "Round 19", "votes": 0}, {"round": "Round 20", "votes": 2}], "A. Brayshaw": [{"round": "Round 1", "votes": 0}, {"round": "Round 2", "votes": 3}, {"round": "Round 3", "votes": 0}, {"round": "Round 4", "votes": 2}, {"round": "Round 5", "votes": 0}, {"round": "Round 6", "votes": 0}, {"round": "Round 7", "votes": 0}, {"round": "Round 8", "votes": 0}, {"round": "Round 9", "votes": 0}, {"round": "Round 10", "votes": 0}, {"round": "Round 11", "votes": 0}, {"round": "Round 12", "votes": 0}, {"round": "Round 13", "votes": 2}, {"round": "Round 15", "votes": 2}, {"round": "Round 16", "votes": 3}, {"round": "Round 17", "votes": 0}, {"round": "Round 18", "votes": 0}, {"round": "Round 19", "votes": 2}, {"round": "Round 20", "votes": 0}]};
-const select = document.getElementById("player-select");
-const body = document.getElementById("detail-body");
-function renderDetail(player) {
-  const rows = ROUND_VOTES[player] || [];
-  let running = 0;
+// Per-team season-vote tally. TEAM_VOTES maps each team to {code, players},
+// where players is the list of {player, votes} for that club's players with
+// MORE THAN 0 predicted votes, already sorted votes-descending. Player names
+// are html.escaped in Python before embedding, so concatenating them into
+// innerHTML below is safe; team is only ever assigned to element properties.
+const TEAM_VOTES = {"Adelaide": {"code": "ADE", "players": [{"player": "J. Dawson", "votes": 15.0}, {"player": "I. Rankine", "votes": 13.0}, {"player": "S. Berry", "votes": 11.0}, {"player": "J. Rachele", "votes": 6.0}, {"player": "D. Fogarty", "votes": 5.0}, {"player": "W. Milera", "votes": 4.0}, {"player": "T. Walker", "votes": 3.0}, {"player": "J. Peatling", "votes": 3.0}, {"player": "R. Laird", "votes": 2.0}, {"player": "M. Keane", "votes": 2.0}, {"player": "J. Worrell", "votes": 1.0}, {"player": "A. Neal-Bullen", "votes": 1.0}]}, "Brisbane Lions": {"code": "BRI", "players": [{"player": "W. Ashcroft", "votes": 24.0}, {"player": "L. Neale", "votes": 22.0}, {"player": "Z. Bailey", "votes": 15.0}, {"player": "K. Lohmann", "votes": 4.0}, {"player": "L. Morris", "votes": 3.0}, {"player": "J. Berry", "votes": 2.0}, {"player": "D. Wilmot", "votes": 2.0}, {"player": "H. Andrews", "votes": 1.0}, {"player": "H. McCluggage", "votes": 1.0}, {"player": "L. Ashcroft", "votes": 1.0}, {"player": "D. Zorko", "votes": 1.0}]}, "Carlton": {"code": "CAR", "players": [{"player": "P. Cripps", "votes": 27.0}, {"player": "G. Hewett", "votes": 10.0}, {"player": "S. Walsh", "votes": 5.0}, {"player": "J. Smith", "votes": 4.0}, {"player": "O. Florent", "votes": 2.0}, {"player": "H. McKay", "votes": 2.0}, {"player": "M. Carroll", "votes": 1.0}, {"player": "B. Ainsworth", "votes": 1.0}, {"player": "W. Hayward", "votes": 1.0}]}, "Collingwood": {"code": "COL", "players": [{"player": "N. Daicos", "votes": 43.0}, {"player": "J. Daicos", "votes": 10.0}, {"player": "D. Cameron", "votes": 8.0}, {"player": "J. de Goey", "votes": 3.0}, {"player": "S. Pendlebury", "votes": 3.0}, {"player": "P. Lipinski", "votes": 2.0}, {"player": "H. Perryman", "votes": 1.0}, {"player": "J. Crisp", "votes": 1.0}, {"player": "S. Sidebottom", "votes": 1.0}]}, "Essendon": {"code": "ESS", "players": [{"player": "Z. Merrett", "votes": 7.0}, {"player": "A. Roberts", "votes": 7.0}, {"player": "D. Parish", "votes": 5.0}, {"player": "S. Durham", "votes": 3.0}, {"player": "N. Bryan", "votes": 2.0}, {"player": "W. Setterfield", "votes": 1.0}]}, "Fremantle": {"code": "FRE", "players": [{"player": "L. Jackson", "votes": 17.0}, {"player": "A. Brayshaw", "votes": 14.0}, {"player": "C. Serong", "votes": 13.0}, {"player": "S. Bolton", "votes": 11.0}, {"player": "M. Reid", "votes": 11.0}, {"player": "J. Amiss", "votes": 9.0}, {"player": "P. Voss", "votes": 8.0}, {"player": "J. Treacy", "votes": 6.0}, {"player": "J. Clark", "votes": 3.0}, {"player": "M. Johnson", "votes": 2.0}, {"player": "B. Cox", "votes": 1.0}]}, "Geelong": {"code": "GEE", "players": [{"player": "B. Smith", "votes": 30.0}, {"player": "M. Holmes", "votes": 16.0}, {"player": "S. Mannagh", "votes": 4.0}, {"player": "J. Cameron", "votes": 3.0}, {"player": "S. Neale", "votes": 3.0}, {"player": "P. Dangerfield", "votes": 2.0}, {"player": "T. Atkins", "votes": 2.0}, {"player": "G. Miers", "votes": 1.0}, {"player": "L. Humphries", "votes": 1.0}, {"player": "O. Dempsey", "votes": 1.0}, {"player": "O. Henry", "votes": 1.0}, {"player": "T. Bruhn", "votes": 1.0}, {"player": "T. Stewart", "votes": 1.0}]}, "Gold Coast": {"code": "GCS", "players": [{"player": "C. Petracca", "votes": 14.0}, {"player": "N. Anderson", "votes": 9.0}, {"player": "T. Miller", "votes": 8.0}, {"player": "J. Noble", "votes": 7.0}, {"player": "M. Rowell", "votes": 5.0}, {"player": "B. King", "votes": 3.0}, {"player": "B. Uwland", "votes": 3.0}, {"player": "J. Witts", "votes": 1.0}, {"player": "Z. Uwland", "votes": 1.0}, {"player": "B. Long", "votes": 1.0}]}, "Greater Western Sydney": {"code": "GWS", "players": [{"player": "C. Oliver", "votes": 19.0}, {"player": "T. Greene", "votes": 9.0}, {"player": "F. Callaghan", "votes": 8.0}, {"player": "J. Stringer", "votes": 7.0}, {"player": "L. Ash", "votes": 6.0}, {"player": "L. Whitfield", "votes": 3.0}, {"player": "S. Coniglio", "votes": 1.0}]}, "Hawthorn": {"code": "HAW", "players": [{"player": "J. Newcombe", "votes": 19.0}, {"player": "J. Gunston", "votes": 12.0}, {"player": "C. Macdonald", "votes": 7.0}, {"player": "N. Watson", "votes": 6.0}, {"player": "J. Impey", "votes": 4.0}, {"player": "J. Ginnivan", "votes": 4.0}, {"player": "J. Sicily", "votes": 3.0}, {"player": "M. Lewis", "votes": 3.0}, {"player": "J. Ward", "votes": 3.0}, {"player": "B. Hardwick", "votes": 3.0}, {"player": "D. Moore", "votes": 2.0}, {"player": "M. Chol", "votes": 2.0}, {"player": "K. Amon", "votes": 1.0}, {"player": "J. Battle", "votes": 1.0}, {"player": "L. Meek", "votes": 1.0}]}, "Melbourne": {"code": "MEL", "players": [{"player": "K. Pickett", "votes": 15.0}, {"player": "J. van Rooyen", "votes": 12.0}, {"player": "M. Gawn", "votes": 12.0}, {"player": "T. Sparrow", "votes": 9.0}, {"player": "J. Steele", "votes": 5.0}, {"player": "H. Langford", "votes": 3.0}, {"player": "J. Bowey", "votes": 2.0}, {"player": "E. Langdon", "votes": 2.0}, {"player": "J. Fitzgerald", "votes": 1.0}, {"player": "B. Fritsch", "votes": 1.0}]}, "North Melbourne": {"code": "NTH", "players": [{"player": "H. Sheezel", "votes": 29.0}, {"player": "L. Davies-Uniacke", "votes": 9.0}, {"player": "C. Daniel", "votes": 9.0}, {"player": "N. Larkey", "votes": 4.0}, {"player": "T. Xerri", "votes": 4.0}, {"player": "P. Curtis", "votes": 2.0}, {"player": "D. Stephens", "votes": 2.0}, {"player": "C. McKercher", "votes": 2.0}, {"player": "L. Parker", "votes": 2.0}, {"player": "J. Darling", "votes": 1.0}, {"player": "C. Comben", "votes": 1.0}]}, "Port Adelaide": {"code": "POR", "players": [{"player": "J. Horne-Francis", "votes": 16.0}, {"player": "Z. Butters", "votes": 16.0}, {"player": "A. Aliir", "votes": 5.0}, {"player": "O. Wines", "votes": 2.0}, {"player": "M. Georgiades", "votes": 2.0}, {"player": "K. Farrell", "votes": 1.0}, {"player": "J. Sweet", "votes": 1.0}]}, "Richmond": {"code": "RIC", "players": [{"player": "N. Balta", "votes": 3.0}, {"player": "T. Taranto", "votes": 2.0}, {"player": "J. Ross", "votes": 2.0}, {"player": "J. Short", "votes": 1.0}]}, "St Kilda": {"code": "STK", "players": [{"player": "N. Wanganeen-Milera", "votes": 16.0}, {"player": "H. Garcia", "votes": 9.0}, {"player": "R. Marshall", "votes": 8.0}, {"player": "B. Hill", "votes": 7.0}, {"player": "M. Hall", "votes": 6.0}, {"player": "C. Wilkie", "votes": 4.0}, {"player": "L. Ryan", "votes": 4.0}, {"player": "J. Sinclair", "votes": 2.0}, {"player": "M. Windhager", "votes": 1.0}, {"player": "J. Macrae", "votes": 1.0}, {"player": "D. Wilson", "votes": 1.0}]}, "Sydney": {"code": "SYD", "players": [{"player": "I. Heeney", "votes": 23.0}, {"player": "B. Grundy", "votes": 17.0}, {"player": "C. Warner", "votes": 8.0}, {"player": "C. Curnow", "votes": 8.0}, {"player": "J. McInerney", "votes": 5.0}, {"player": "E. Gulden", "votes": 5.0}, {"player": "N. Blakey", "votes": 4.0}, {"player": "J. Amartey", "votes": 3.0}, {"player": "M. Rosas", "votes": 3.0}, {"player": "R. Bice", "votes": 2.0}, {"player": "T. Papley", "votes": 2.0}, {"player": "J. Rowbottom", "votes": 1.0}, {"player": "T. McCartin", "votes": 1.0}]}, "Western Bulldogs": {"code": "WBD", "players": [{"player": "M. Bontempelli", "votes": 27.0}, {"player": "E. Richards", "votes": 14.0}, {"player": "A. Naughton", "votes": 4.0}, {"player": "J. Freijah", "votes": 4.0}, {"player": "B. Dale", "votes": 3.0}, {"player": "T. Liberatore", "votes": 2.0}, {"player": "T. English", "votes": 2.0}, {"player": "R. Sanders", "votes": 2.0}, {"player": "M. Kennedy", "votes": 2.0}, {"player": "B. Williams", "votes": 1.0}]}, "West Coast": {"code": "WCE", "players": [{"player": "H. Reid", "votes": 6.0}, {"player": "M. Murdock", "votes": 3.0}, {"player": "J. Waterman", "votes": 3.0}, {"player": "T. McCarthy", "votes": 3.0}, {"player": "W. Duursma", "votes": 1.0}, {"player": "B. Williams", "votes": 1.0}]}};
+const teamSelect = document.getElementById("team-select");
+const teamBody = document.getElementById("team-body");
+const teamLogo = document.getElementById("team-logo");
+function renderTeam(team) {
+  const info = TEAM_VOTES[team] || {code: "", players: []};
+  if (info.code) {
+    teamLogo.src = "logos/" + info.code + ".png";
+    teamLogo.alt = team + " logo";
+    teamLogo.style.display = "";
+  } else {
+    teamLogo.removeAttribute("src");
+    teamLogo.style.display = "none";
+  }
   let out = "";
-  for (const r of rows) {
-    running += r.votes;
-    out += "<tr><td class=\"round-cell\">" + r.round +
-           "</td><td class=\"votes\">" + r.votes +
-           "</td><td class=\"running\">" + running + "</td></tr>";
+  for (const r of info.players) {
+    out += "<tr><td class=\"team-player\">" + r.player +
+           "</td><td class=\"votes\">" + r.votes.toFixed(1) + "</td></tr>";
   }
   if (!out) {
-    out = "<tr><td class=\"round-cell\" colspan=\"3\">No rounds played yet.</td></tr>";
+    out = "<tr><td class=\"team-player\" colspan=\"2\">No players with predicted votes yet.</td></tr>";
   }
-  body.innerHTML = out;
+  teamBody.innerHTML = out;
 }
-select.addEventListener("change", function() { renderDetail(select.value); });
-if (select.options.length > 0) { renderDetail(select.options[0].value); }
+teamSelect.addEventListener("change", function() { renderTeam(teamSelect.value); });
+if (teamSelect.options.length > 0) { renderTeam(teamSelect.value); }
 
 // Client-side sortable leaderboard columns. Sorts the visible rows by each
 // cell's raw data-sort-value (numeric or text) rather than the formatted
