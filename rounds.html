@@ -1,0 +1,183 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brownlow Predictor 2026 — Round Matrix</title>
+<style>
+  :root {
+    --grass: #0d1f0d;
+    --panel: #12261a;
+    --gold: #f0a500;
+    --gold-bright: #ffc940;
+    --white: #f5f0e8;
+    --muted: #7a9a7a;
+    --line: rgba(240, 165, 0, 0.14);
+    --row-line: rgba(255, 255, 255, 0.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--grass);
+    color: var(--white);
+    margin: 0;
+    min-height: 100vh;
+    padding: 40px 16px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin: 0 0 4px;
+    color: var(--white);
+  }
+  h1 .accent { color: var(--gold); }
+  .subtitle { color: var(--muted); font-size: 14px; margin: 0 0 8px; }
+  .nav-link { margin: 0 0 24px; font-size: 14px; }
+  .nav-link a { color: var(--gold); text-decoration: none; font-weight: 600; }
+  .nav-link a:hover { text-decoration: underline; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  /* Up to ~23 round columns + player + total is wide; scroll the table inside
+     this wrapper rather than letting the whole page overflow horizontally. */
+  .matrix-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  thead th {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(0, 0, 0, 0.25);
+    white-space: nowrap;
+  }
+  thead th.player-col { text-align: left; }
+  thead th.round-col, thead th.total-col { text-align: center; }
+  tbody td {
+    padding: 10px;
+    border-bottom: 1px solid var(--row-line);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(240, 165, 0, 0.05); }
+  td.rank { color: var(--gold); font-weight: 800; width: 34px; }
+  td.player {
+    text-align: left;
+    font-weight: 600;
+    color: var(--white);
+    white-space: nowrap;
+  }
+  /* Vote-count cell emphasis: 3 votes (best on ground) get the gold accent and
+     bold so a reader can scan a row for a player's best rounds; 1-2 subdued, 0
+     muted, and a round the player did not play the most muted of all. */
+  td.cell.v3 { color: var(--gold-bright); font-weight: 800; background: rgba(240, 165, 0, 0.12); }
+  td.cell.v2 { color: var(--white); font-weight: 700; }
+  td.cell.v1 { color: var(--white); font-weight: 600; }
+  td.cell.v0 { color: var(--muted); }
+  td.cell.dnp { color: rgba(122, 154, 122, 0.4); }
+  td.total {
+    font-weight: 800;
+    color: var(--gold);
+    border-left: 1px solid var(--line);
+  }
+  thead th.total-col { border-left: 1px solid var(--line); }
+  footer {
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .legend .swatch { font-weight: 800; }
+  .legend .swatch.v3 { color: var(--gold-bright); }
+  .legend .swatch.dnp { color: rgba(122, 154, 122, 0.55); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Round-by-round <span class="accent">matrix</span></h1>
+  <p class="subtitle">Every top-20 player's discrete votes, round by round.</p>
+  <p class="nav-link"><a href="index.html">&larr; Back to leaderboard</a></p>
+  <div class="card">
+    <div class="matrix-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th class="player-col">#</th>
+            <th class="player-col">Player</th>
+            <th class="round-col">1</th>
+            <th class="round-col">2</th>
+            <th class="round-col">3</th>
+            <th class="round-col">4</th>
+            <th class="round-col">5</th>
+            <th class="round-col">6</th>
+            <th class="round-col">7</th>
+            <th class="round-col">8</th>
+            <th class="round-col">9</th>
+            <th class="round-col">10</th>
+            <th class="round-col">11</th>
+            <th class="round-col">12</th>
+            <th class="round-col">13</th>
+            <th class="round-col">14</th>
+            <th class="round-col">15</th>
+            <th class="round-col">16</th>
+            <th class="round-col">17</th>
+            <th class="round-col">18</th>
+            <th class="round-col">19</th>
+            <th class="round-col">20</th>
+            <th class="round-col">21</th>
+            <th class="total-col">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+            <tr><td class="rank">1</td><td class="player">N. Daicos</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="total">43</td></tr>
+            <tr><td class="rank">2</td><td class="player">B. Smith</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="cell v2">2</td><td class="cell dnp">—</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v2">2</td><td class="total">32</td></tr>
+            <tr><td class="rank">3</td><td class="player">H. Sheezel</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="total">29</td></tr>
+            <tr><td class="rank">4</td><td class="player">M. Bontempelli</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="cell dnp">—</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="total">26</td></tr>
+            <tr><td class="rank">5</td><td class="player">P. Cripps</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="total">25</td></tr>
+            <tr><td class="rank">6</td><td class="player">L. Neale</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="total">23</td></tr>
+            <tr><td class="rank">7</td><td class="player">W. Ashcroft</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell v3">3</td><td class="total">23</td></tr>
+            <tr><td class="rank">8</td><td class="player">I. Heeney</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell dnp">—</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="total">23</td></tr>
+            <tr><td class="rank">9</td><td class="player">Z. Butters</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell dnp">—</td><td class="total">20</td></tr>
+            <tr><td class="rank">10</td><td class="player">C. Oliver</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell dnp">—</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v1">1</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="total">17</td></tr>
+            <tr><td class="rank">11</td><td class="player">N. Wanganeen-Milera</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v2">2</td><td class="cell dnp">—</td><td class="cell dnp">—</td><td class="cell dnp">—</td><td class="cell dnp">—</td><td class="cell v1">1</td><td class="cell v2">2</td><td class="cell v1">1</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="total">17</td></tr>
+            <tr><td class="rank">12</td><td class="player">J. Newcombe</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="total">16</td></tr>
+            <tr><td class="rank">13</td><td class="player">J. Horne-Francis</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v2">2</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="total">16</td></tr>
+            <tr><td class="rank">14</td><td class="player">M. Holmes</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell dnp">—</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="total">16</td></tr>
+            <tr><td class="rank">15</td><td class="player">K. Pickett</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="total">15</td></tr>
+            <tr><td class="rank">16</td><td class="player">B. Grundy</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v2">2</td><td class="cell v1">1</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="total">15</td></tr>
+            <tr><td class="rank">17</td><td class="player">J. Dawson</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell dnp">—</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="total">15</td></tr>
+            <tr><td class="rank">18</td><td class="player">M. Gawn</td><td class="cell dnp">—</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell dnp">—</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="total">14</td></tr>
+            <tr><td class="rank">19</td><td class="player">A. Brayshaw</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell dnp">—</td><td class="cell v2">2</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="total">14</td></tr>
+            <tr><td class="rank">20</td><td class="player">S. Bolton</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell v3">3</td><td class="cell v3">3</td><td class="cell v0">0</td><td class="cell v1">1</td><td class="cell v1">1</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="cell v2">2</td><td class="cell v0">0</td><td class="cell v0">0</td><td class="cell dnp">—</td><td class="cell v0">0</td><td class="total">14</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="legend">
+    <span><span class="swatch v3">3</span> best on ground</span>
+    <span><span class="swatch">2 / 1</span> minor votes</span>
+    <span><span class="swatch">0</span> played, no votes</span>
+    <span><span class="swatch dnp">&mdash;</span> did not play</span>
+  </div>
+  <footer>Last updated 2026-07-30 04:44 UTC</footer>
+</div>
+</body>
+</html>
