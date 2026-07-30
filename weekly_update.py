@@ -131,8 +131,10 @@ def main():
 
     model = load_model(MODEL_PATH)
     leaderboard = accumulate_season_votes(model, season_df)
-    # render_leaderboard shows only the top 20; compute per-round detail for
-    # exactly those players (same head(20) convention) to keep it cheap.
+    # The round-by-round matrix (rounds.html) shows only the top 20; compute
+    # per-round detail for exactly those players (same head(20) convention) to
+    # keep it cheap. render_leaderboard no longer needs this -- it derives its
+    # team-tally section from the FULL leaderboard passed below.
     top_20_players = leaderboard.head(20)["player"].tolist()
     round_votes = per_round_votes(model, season_df, top_20_players)
 
@@ -146,7 +148,7 @@ def main():
         logger.warning("could not fetch/parse Sportsbet Brownlow odds, continuing without them: %s", e)
         odds = []
 
-    render_leaderboard(leaderboard, round_votes, odds, OUTPUT_PATH, CURRENT_SEASON)
+    render_leaderboard(leaderboard, odds, OUTPUT_PATH, CURRENT_SEASON)
     logger.info("wrote updated leaderboard to %s (%d players)", OUTPUT_PATH, len(leaderboard))
 
     # Second page: the same round_votes rendered as an all-20 round-by-round

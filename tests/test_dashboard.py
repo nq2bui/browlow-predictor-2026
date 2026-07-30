@@ -32,12 +32,12 @@ def test_display_round_label_non_opening_round_season_is_not_shifted():
     assert display_round_label("QF", 2015) == "QF"
 
 
-def _round_votes_for(players, rounds=("1", "2", "10")):
-    rows = []
-    for p in players:
-        for r in rounds:
-            rows.append({"player": p, "round": r, "votes": 2})
-    return pd.DataFrame(rows, columns=["player", "round", "votes"])
+def _team_votes_blob(html):
+    """Extract and parse the embedded ``const TEAM_VOTES = {...};`` JSON blob."""
+    marker = "const TEAM_VOTES ="
+    start = html.index(marker) + len(marker)
+    blob = html[start:html.index(";", start)].strip()
+    return json.loads(blob)
 
 
 def test_render_leaderboard_writes_top_20_table(tmp_path):
@@ -46,46 +46,114 @@ def test_render_leaderboard_writes_top_20_table(tmp_path):
         "team": ["Richmond"] * 25,
         "predicted_season_votes": [25 - i for i in range(25)],
     })
-    round_votes = _round_votes_for(
-        [f"Player{i}" for i in range(25)], rounds=("1", "5", "10")
-    )
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, [], str(output_path), 2026)
+    render_leaderboard(leaderboard, [], str(output_path), 2026)
 
     html = output_path.read_text()
-    assert "Player0" in html
-    assert "Player19" in html
-    assert "Player20" not in html  # only top 20 shown
+    # The leaderboard TABLE shows only the top 20 (Player0..Player19 as rows);
+    # Player20 must not be a leaderboard row (">Player20<" is the row cell form).
+    assert ">Player0<" in html
+    assert ">Player19<" in html
+    assert ">Player20<" not in html
     assert "<table" in html
     # Richmond's logo path and brand-color accent render for a known team.
     assert "logos/RIC.png" in html
     assert "#FFD200" in html
 
-    # Dropdown lists the top-20 players (Player0..Player19), not the rest.
-    assert '<option value="Player0">Player0</option>' in html
-    assert '<option value="Player19">Player19</option>' in html
-    assert '<option value="Player20">' not in html
+    # The team tally, by contrast, covers EVERY scored player for the club, not
+    # just the top 20 -- so Player20..Player24 DO appear in the embedded blob.
+    data = _team_votes_blob(html)
+    richmond_names = [p["player"] for p in data["Richmond"]["players"]]
+    assert "Player20" in richmond_names
+    assert "Player24" in richmond_names
+    assert len(richmond_names) == 25
 
-    # Embedded JSON blob carries the round-by-round data for a top-20 player,
-    # scoped to top-20 only (Player20 absent from the blob too).
-    assert "const ROUND_VOTES =" in html
-    start = html.index("const ROUND_VOTES =") + len("const ROUND_VOTES =")
-    blob = html[start:html.index(";", start)].strip()
-    data = json.loads(blob)
-    assert "Player0" in data
-    assert "Player20" not in data
-    # 2026 season: afltables round "1" -> "Opening Round", "5" -> "Round 4",
-    # "10" -> "Round 9" (Opening-Round off-by-one corrected for DISPLAY only).
-    assert data["Player0"] == [
-        {"round": "Opening Round", "votes": 2},
-        {"round": "Round 4", "votes": 2},
-        {"round": "Round 9", "votes": 2},
+
+def test_render_leaderboard_removes_round_by_round_section(tmp_path):
+    # The old per-player round-by-round dropdown + ROUND_VOTES blob was replaced
+    # by the team-tally feature; none of its markers may survive.
+    leaderboard = pd.DataFrame({
+        "player": ["A. One", "B. Two"],
+        "team": ["Richmond", "Collingwood"],
+        "predicted_season_votes": [10.0, 5.0],
+    })
+    output_path = tmp_path / "index.html"
+
+    render_leaderboard(leaderboard, [], str(output_path), 2026)
+    html = output_path.read_text()
+
+    assert "ROUND_VOTES" not in html
+    assert "player-select" not in html
+    assert "Round-by-round" not in html
+    assert "Season total" not in html
+
+
+def test_render_leaderboard_team_tally(tmp_path):
+    # FULL scored field spanning several clubs, with more players per club than
+    # the top-20 table would ever show, and per club a mix of nonzero-vote
+    # players (must appear, sorted votes-descending) and exactly-0 players (must
+    # be excluded from that club's tally).
+    leaderboard = pd.DataFrame({
+        "player": ["A. One", "A. Two", "A. Three", "A. Zero",
+                   "B. Solo", "B. Zed",
+                   "C. Only"],
+        "team": ["Richmond", "Richmond", "Richmond", "Richmond",
+                 "Collingwood", "Collingwood",
+                 "Geelong"],
+        # Deliberately NOT pre-sorted within Richmond (8 before 12) to prove the
+        # tally sorts votes-descending itself.
+        "predicted_season_votes": [8.0, 12.0, 4.0, 0.0,
+                                    5.0, 0.0,
+                                    3.0],
+    })
+    output_path = tmp_path / "index.html"
+
+    render_leaderboard(leaderboard, [], str(output_path), 2026)
+    html = output_path.read_text()
+
+    # A team <select> exists and lists every club present in the data...
+    assert 'id="team-select"' in html
+    assert '<option value="Richmond"' in html
+    assert '<option value="Collingwood"' in html
+    assert '<option value="Geelong"' in html
+    # ...and, being seeded from the canonical 18-club list, also lists clubs not
+    # present in this synthetic data.
+    assert '<option value="Hawthorn"' in html
+    assert '<option value="West Coast"' in html
+
+    # Default selection is the #1-ranked player's club (A. Two, Richmond, 12).
+    assert '<option value="Richmond" selected>' in html
+
+    data = _team_votes_blob(html)
+
+    # Richmond: only the three >0 players, sorted votes-descending; A. Zero (0)
+    # is excluded entirely.
+    assert data["Richmond"]["players"] == [
+        {"player": "A. Two", "votes": 12.0},
+        {"player": "A. One", "votes": 8.0},
+        {"player": "A. Three", "votes": 4.0},
     ]
-    # The corrected labels are what's embedded; the raw shifted labels are not.
-    assert '"round": "Opening Round"' in html
-    assert '"round": "Round 4"' in html
-    assert '"round": "Round 5"' not in html
+    richmond_names = [p["player"] for p in data["Richmond"]["players"]]
+    assert "A. Zero" not in richmond_names
+
+    # Collingwood: the 0-vote B. Zed is excluded; only B. Solo remains.
+    assert data["Collingwood"]["players"] == [{"player": "B. Solo", "votes": 5.0}]
+
+    # Geelong: its single vote-getter.
+    assert data["Geelong"]["players"] == [{"player": "C. Only", "votes": 3.0}]
+
+    # A canonical club with no data embeds an empty player list (renders the
+    # "no players" placeholder client-side rather than breaking).
+    assert data["Hawthorn"]["players"] == []
+
+    # Each team carries its logo code (reused from brownlow/teams.py).
+    assert data["Richmond"]["code"] == "RIC"
+
+    # The vanilla-JS handler + heading logo element are present.
+    assert 'id="team-body"' in html
+    assert 'id="team-logo"' in html
+    assert "function renderTeam" in html
 
 
 def test_render_round_matrix_builds_ordered_player_round_grid(tmp_path):
@@ -237,15 +305,17 @@ def test_render_leaderboard_omits_logo_for_unknown_team(tmp_path):
         "team": ["Fake Team FC"],
         "predicted_season_votes": [5.0],
     })
-    round_votes = _round_votes_for(["Nobody"])
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, [], str(output_path), 2026)
+    render_leaderboard(leaderboard, [], str(output_path), 2026)
 
     html = output_path.read_text()
-    # Unknown team degrades gracefully: no broken logo <img>, neutral swatch instead.
-    assert "logos/" not in html
-    assert "team-swatch" in html
+    # Unknown team degrades gracefully in its leaderboard ROW: no broken logo
+    # <img>, neutral swatch instead. (Scope to the row -- the team-tally JS
+    # legitimately contains a literal "logos/" string for known clubs.)
+    nobody_row = _row_containing(html, ">Nobody<")
+    assert "logos/" not in nobody_row
+    assert "team-swatch" in nobody_row
 
 
 def test_render_leaderboard_shows_odds_columns_and_placeholder(tmp_path):
@@ -254,7 +324,6 @@ def test_render_leaderboard_shows_odds_columns_and_placeholder(tmp_path):
         "team": ["Collingwood", "Western Bulldogs", "Richmond"],
         "predicted_season_votes": [30.0, 25.0, 20.0],
     })
-    round_votes = _round_votes_for(["N. Daicos", "M. Bontempelli", "J. Nomatch"])
     # Odds carried on the already-normalized "F. Surname" join key. J. Nomatch is
     # deliberately absent from the market to exercise the placeholder path.
     odds = [
@@ -263,7 +332,7 @@ def test_render_leaderboard_shows_odds_columns_and_placeholder(tmp_path):
     ]
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, odds, str(output_path), 2026)
+    render_leaderboard(leaderboard, odds, str(output_path), 2026)
 
     html = output_path.read_text()
     # New column headers present.
@@ -284,14 +353,13 @@ def test_render_leaderboard_has_sort_attributes_and_script(tmp_path):
         "team": ["Collingwood", "Western Bulldogs", "Richmond"],
         "predicted_season_votes": [30.0, 25.0, 20.0],
     })
-    round_votes = _round_votes_for(["N. Daicos", "M. Bontempelli", "J. Nomatch"])
     odds = [
         {"player": "N. Daicos", "decimal_odds": 1.20},
         {"player": "M. Bontempelli", "decimal_odds": 10.00},
     ]
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, odds, str(output_path), 2026)
+    render_leaderboard(leaderboard, odds, str(output_path), 2026)
     html = output_path.read_text()
 
     # Sortable headers carry the column index + type metadata the JS reads.
@@ -328,10 +396,9 @@ def test_render_leaderboard_embeds_staleness_check(tmp_path):
         "team": ["Collingwood", "Western Bulldogs"],
         "predicted_season_votes": [30.0, 25.0],
     })
-    round_votes = _round_votes_for(["N. Daicos", "M. Bontempelli"])
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, [], str(output_path), 2026)
+    render_leaderboard(leaderboard, [], str(output_path), 2026)
     html = output_path.read_text()
 
     # 1. Generation timestamp embedded in a machine-readable, JS-parseable form:
@@ -407,10 +474,9 @@ def test_render_leaderboard_table_is_horizontally_scrollable(tmp_path):
         "team": ["Collingwood", "Western Bulldogs"],
         "predicted_season_votes": [30.0, 25.0],
     })
-    round_votes = _round_votes_for(["N. Daicos", "M. Bontempelli"])
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, [], str(output_path), 2026)
+    render_leaderboard(leaderboard, [], str(output_path), 2026)
     html = output_path.read_text()
 
     # The scroll mechanism itself: a class with overflow-x styling.
@@ -440,7 +506,6 @@ def test_render_leaderboard_divergence_indicator(tmp_path):
         "team": ["Richmond"] * 8,
         "predicted_season_votes": [80, 70, 60, 50, 40, 30, 20, 10],
     })
-    round_votes = _round_votes_for(players)
     # Odds ascending with model rank => market rank is the reverse of model rank
     # for P1..P7. P8 intentionally has no odds.
     odds = [
@@ -454,7 +519,7 @@ def test_render_leaderboard_divergence_indicator(tmp_path):
     ]
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, odds, str(output_path), 2026)
+    render_leaderboard(leaderboard, odds, str(output_path), 2026)
     html = output_path.read_text()
 
     # P1: model #1 vs market #7 (gap 6 >= 5) -> model likes them MORE -> up marker.

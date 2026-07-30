@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from brownlow.odds import implied_probability
-from brownlow.teams import get_team_info
+from brownlow.teams import TEAM_INFO, get_team_info
 from brownlow.weekly import round_sort_key
 
 # AFL seasons that have an official, UNNUMBERED "Opening Round" played before
@@ -209,7 +209,7 @@ _PAGE_TEMPLATE = """<!doctype html>
     text-transform: uppercase;
     color: var(--muted);
   }}
-  #player-select {{
+  #team-select {{
     background: var(--panel);
     color: var(--white);
     border: 1px solid var(--line);
@@ -220,14 +220,18 @@ _PAGE_TEMPLATE = """<!doctype html>
     flex: 1;
     max-width: 320px;
   }}
-  #player-select:focus {{ outline: none; border-color: var(--gold); }}
-  td.round-cell {{ font-variant-numeric: tabular-nums; }}
-  td.running {{
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    color: var(--muted);
+  #team-select:focus {{ outline: none; border-color: var(--gold); }}
+  /* Selected-team logo shown beside the "Team tally" heading; swapped by the
+     vanilla-JS handler on each selection. Reuses the logos/{{code}}.png assets
+     via brownlow/teams.py's team codes. */
+  .detail h2 .team-logo-lg {{
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    vertical-align: -6px;
+    margin-right: 8px;
   }}
-  th.running {{ text-align: right; }}
+  td.team-player {{ font-weight: 600; color: var(--white); }}
   .nav-link {{ margin: 0 0 24px; font-size: 14px; }}
   .nav-link a {{ color: var(--gold); text-decoration: none; font-weight: 600; }}
   .nav-link a:hover {{ text-decoration: underline; }}
@@ -270,23 +274,22 @@ _PAGE_TEMPLATE = """<!doctype html>
   </div>
 
   <div class="detail">
-    <h2>Round-by-round <span class="accent">breakdown</span></h2>
+    <h2><img id="team-logo" class="team-logo-lg" src="" alt="" style="display: none;">Team <span class="accent">tally</span></h2>
     <div class="detail-controls">
-      <label for="player-select">Player</label>
-      <select id="player-select">
-{options}
+      <label for="team-select">Team</label>
+      <select id="team-select">
+{team_options}
       </select>
     </div>
     <div class="card">
       <table>
         <thead>
           <tr>
-            <th>Round</th>
-            <th class="votes">Votes</th>
-            <th class="running">Season total</th>
+            <th>Player</th>
+            <th class="votes">Predicted votes</th>
           </tr>
         </thead>
-        <tbody id="detail-body"></tbody>
+        <tbody id="team-body"></tbody>
       </table>
     </div>
   </div>
@@ -294,26 +297,37 @@ _PAGE_TEMPLATE = """<!doctype html>
   <footer>Last updated {timestamp}</footer>
 </div>
 <script>
-const ROUND_VOTES = {round_votes_json};
-const select = document.getElementById("player-select");
-const body = document.getElementById("detail-body");
-function renderDetail(player) {{
-  const rows = ROUND_VOTES[player] || [];
-  let running = 0;
+// Per-team season-vote tally. TEAM_VOTES maps each team to {{code, players}},
+// where players is the list of {{player, votes}} for that club's players with
+// MORE THAN 0 predicted votes, already sorted votes-descending. Player names
+// are html.escaped in Python before embedding, so concatenating them into
+// innerHTML below is safe; team is only ever assigned to element properties.
+const TEAM_VOTES = {team_votes_json};
+const teamSelect = document.getElementById("team-select");
+const teamBody = document.getElementById("team-body");
+const teamLogo = document.getElementById("team-logo");
+function renderTeam(team) {{
+  const info = TEAM_VOTES[team] || {{code: "", players: []}};
+  if (info.code) {{
+    teamLogo.src = "logos/" + info.code + ".png";
+    teamLogo.alt = team + " logo";
+    teamLogo.style.display = "";
+  }} else {{
+    teamLogo.removeAttribute("src");
+    teamLogo.style.display = "none";
+  }}
   let out = "";
-  for (const r of rows) {{
-    running += r.votes;
-    out += "<tr><td class=\\"round-cell\\">" + r.round +
-           "</td><td class=\\"votes\\">" + r.votes +
-           "</td><td class=\\"running\\">" + running + "</td></tr>";
+  for (const r of info.players) {{
+    out += "<tr><td class=\\"team-player\\">" + r.player +
+           "</td><td class=\\"votes\\">" + r.votes.toFixed(1) + "</td></tr>";
   }}
   if (!out) {{
-    out = "<tr><td class=\\"round-cell\\" colspan=\\"3\\">No rounds played yet.</td></tr>";
+    out = "<tr><td class=\\"team-player\\" colspan=\\"2\\">No players with predicted votes yet.</td></tr>";
   }}
-  body.innerHTML = out;
+  teamBody.innerHTML = out;
 }}
-select.addEventListener("change", function() {{ renderDetail(select.value); }});
-if (select.options.length > 0) {{ renderDetail(select.options[0].value); }}
+teamSelect.addEventListener("change", function() {{ renderTeam(teamSelect.value); }});
+if (teamSelect.options.length > 0) {{ renderTeam(teamSelect.value); }}
 
 // Client-side sortable leaderboard columns. Sorts the visible rows by each
 // cell's raw data-sort-value (numeric or text) rather than the formatted
@@ -404,11 +418,13 @@ _DIVERGENCE_THRESHOLD = 5
 
 def render_leaderboard(
     leaderboard: pd.DataFrame,
-    round_votes: pd.DataFrame,
     odds: list[dict],
     output_path: str,
     season: int,
 ) -> None:
+    # ``leaderboard`` is the FULL scored field (every player, not pre-sliced to
+    # 20). The top-20 table below uses .head(20); the team-tally section further
+    # down uses the whole thing so it can show every scored player per club.
     # Index odds by the already-normalized "F. Surname" join key so a direct
     # string match against the (identically normalized) leaderboard player works.
     odds_by_player = {o["player"]: o["decimal_odds"] for o in odds}
@@ -494,34 +510,55 @@ def render_leaderboard(
         )
     rows_html = "\n".join(rows)
 
-    # Detail data is scoped to the top-20 players, listed in leaderboard order so
-    # the dropdown's first entry (and thus the default view) is the #1 player.
-    top20_players = [str(row.player) for row in top20.itertuples()]
-
-    # Build the per-player round list from round_votes, preserving its existing
-    # round ordering (per_round_votes already sorts numeric-then-finals). Only the
-    # DISPLAY label is relabeled (via display_round_label) to correct afltables'
-    # Opening-Round off-by-one for the current season; the underlying ordering is
-    # untouched (rows arrive pre-sorted by the real round value).
-    round_data = {name: [] for name in top20_players}
-    for rv in round_votes.itertuples():
-        player = str(rv.player)
-        if player in round_data:
-            round_data[player].append(
-                {
-                    "round": display_round_label(str(rv.round), season),
-                    "votes": int(rv.votes),
-                }
-            )
-    # json.dumps safely escapes strings for the JS/JSON context (no manual
-    # formatting), guarding against injection via player/round values.
-    round_votes_json = json.dumps(round_data)
-
-    options = "\n".join(
-        '        <option value="{name}">{name}</option>'.format(
-            name=html.escape(name)
+    # Team-tally section. Group the FULL scored field (not just the top 20) by
+    # club, keeping only players with MORE THAN 0 predicted votes, sorted
+    # votes-descending. leaderboard is already sorted votes-descending overall,
+    # so each club's players arrive in that order; we sort again defensively.
+    qualifying = leaderboard[leaderboard["predicted_season_votes"] > 0]
+    players_by_team: dict[str, list[dict]] = {}
+    for row in qualifying.itertuples():
+        players_by_team.setdefault(str(row.team), []).append(
+            {
+                # html.escape here so the names are safe to concatenate straight
+                # into innerHTML by the client-side renderTeam handler.
+                "player": html.escape(str(row.player)),
+                "votes": float(row.predicted_season_votes),
+            }
         )
-        for name in top20_players
+    for lst in players_by_team.values():
+        lst.sort(key=lambda d: d["votes"], reverse=True)
+
+    # Canonical 18 AFL clubs (in TEAM_INFO order) form the dropdown, plus any
+    # other team actually present in the data (defensive: unknown/renamed clubs
+    # still show up rather than silently vanishing). Each team carries its logo
+    # code + qualifying players; teams with no vote-getters embed an empty list.
+    ordered_teams = list(TEAM_INFO.keys())
+    for team_name in players_by_team:
+        if team_name not in ordered_teams:
+            ordered_teams.append(team_name)
+
+    team_votes_data = {
+        team_name: {
+            "code": get_team_info(team_name)["code"],
+            "players": players_by_team.get(team_name, []),
+        }
+        for team_name in ordered_teams
+    }
+    # json.dumps safely escapes for the JS/JSON context; player names are already
+    # html.escaped above so they render correctly inside innerHTML.
+    team_votes_json = json.dumps(team_votes_data)
+
+    # Default the dropdown to the #1-ranked player's club so the section shows
+    # meaningful data on initial load rather than a blank/arbitrary table.
+    default_team = (
+        str(leaderboard.iloc[0]["team"]) if not leaderboard.empty else None
+    )
+    team_options = "\n".join(
+        '        <option value="{name}"{sel}>{name}</option>'.format(
+            name=html.escape(team_name),
+            sel=" selected" if team_name == default_team else "",
+        )
+        for team_name in ordered_teams
     )
 
     now = datetime.now(timezone.utc)
@@ -531,8 +568,8 @@ def render_leaderboard(
     generated_at_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     html_doc = _PAGE_TEMPLATE.format(
         rows=rows_html,
-        options=options,
-        round_votes_json=round_votes_json,
+        team_options=team_options,
+        team_votes_json=team_votes_json,
         timestamp=timestamp,
         generated_at_iso=generated_at_iso,
     )
