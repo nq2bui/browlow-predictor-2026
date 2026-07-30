@@ -50,6 +50,12 @@ _PAGE_TEMPLATE = """<!doctype html>
     border-radius: 14px;
     overflow: hidden;
   }}
+  /* The leaderboard has many columns (rank, player, team+logo, votes, odds,
+     implied %); on a narrow/mobile viewport it would otherwise overflow the
+     page. Scroll the table sideways inside this wrapper instead, so the page
+     body never scrolls horizontally and the card's rounded corners/border
+     (from `.card`'s overflow:hidden) stay intact. */
+  .table-scroll {{ overflow-x: auto; -webkit-overflow-scrolling: touch; }}
   table {{ width: 100%; border-collapse: collapse; }}
   thead th {{
     text-align: left;
@@ -173,6 +179,16 @@ _PAGE_TEMPLATE = """<!doctype html>
   .nav-link {{ margin: 0 0 24px; font-size: 14px; }}
   .nav-link a {{ color: var(--gold); text-decoration: none; font-weight: 600; }}
   .nav-link a:hover {{ text-decoration: underline; }}
+  /* Narrow viewports: tighten body padding and trim the table's cell padding
+     and font a touch so more of the leaderboard fits before horizontal
+     scrolling (via `.table-scroll`) kicks in. `th`/`td` keep white-space:nowrap
+     implicitly via short values, so columns stay legible while scrolling. */
+  @media (max-width: 600px) {{
+    body {{ padding: 24px 10px; }}
+    h1 {{ font-size: 24px; }}
+    thead th {{ padding: 12px 10px; font-size: 10px; }}
+    tbody td {{ padding: 10px; font-size: 13px; }}
+  }}
 </style>
 </head>
 <body>
@@ -181,6 +197,7 @@ _PAGE_TEMPLATE = """<!doctype html>
   <p class="subtitle">Predicted top 20, updated after each round.</p>
   <p class="nav-link"><a href="rounds.html">View round-by-round matrix for all 20 &rarr;</a></p>
   <div class="card">
+    <div class="table-scroll">
     <table id="leaderboard-table">
       <thead>
         <tr>
@@ -196,6 +213,7 @@ _PAGE_TEMPLATE = """<!doctype html>
 {rows}
       </tbody>
     </table>
+    </div>
   </div>
 
   <div class="detail">

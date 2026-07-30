@@ -228,6 +228,39 @@ def test_render_leaderboard_has_sort_attributes_and_script(tmp_path):
     assert "localeCompare" in html
 
 
+def test_render_leaderboard_table_is_horizontally_scrollable(tmp_path):
+    # On narrow/mobile viewports the multi-column leaderboard must scroll
+    # sideways within its own bounded container instead of overflowing the
+    # page body. The table is wrapped in a `.table-scroll` div that gets
+    # `overflow-x: auto`, sitting inside the existing `.card` wrapper.
+    leaderboard = pd.DataFrame({
+        "player": ["N. Daicos", "M. Bontempelli"],
+        "team": ["Collingwood", "Western Bulldogs"],
+        "predicted_season_votes": [30.0, 25.0],
+    })
+    round_votes = _round_votes_for(["N. Daicos", "M. Bontempelli"])
+    output_path = tmp_path / "index.html"
+
+    render_leaderboard(leaderboard, round_votes, [], str(output_path))
+    html = output_path.read_text()
+
+    # The scroll mechanism itself: a class with overflow-x styling.
+    assert ".table-scroll" in html
+    assert "overflow-x: auto" in html
+
+    # Mobile scaling requires the viewport meta tag to be present.
+    assert '<meta name="viewport" content="width=device-width, initial-scale=1.0">' in html
+
+    # The scroll wrapper sits INSIDE the card and directly around the
+    # leaderboard table (not around the whole page), so the card's rounded
+    # corners/border are preserved while the table scrolls within it.
+    card_start = html.index('<div class="card">')
+    scroll_start = html.index('<div class="table-scroll">', card_start)
+    table_start = html.index('<table id="leaderboard-table">', scroll_start)
+    # Ordering: card opens, then scroll wrapper, then the table.
+    assert card_start < scroll_start < table_start
+
+
 def test_render_leaderboard_divergence_indicator(tmp_path):
     # 8 players in model order (season votes descending). Odds are deliberately
     # REVERSED vs the model, so the model's #1 is the market's worst and vice
