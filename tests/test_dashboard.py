@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime
 
 import pandas as pd
 
@@ -261,6 +262,85 @@ def test_render_leaderboard_has_sort_attributes_and_script(tmp_path):
     assert "getAttribute(\"data-sort-value\")" in html
     assert "sortBy" in html
     assert "localeCompare" in html
+
+
+def test_render_leaderboard_embeds_staleness_check(tmp_path):
+    # A staleness safeguard: because this is a static page with no server-side
+    # process, the only way to notice the weekly cron has stopped running is to
+    # compare the embedded generation time against the viewer's browser clock
+    # and warn if the gap exceeds 10 days (the cron runs every ~7 days).
+    leaderboard = pd.DataFrame({
+        "player": ["N. Daicos", "M. Bontempelli"],
+        "team": ["Collingwood", "Western Bulldogs"],
+        "predicted_season_votes": [30.0, 25.0],
+    })
+    round_votes = _round_votes_for(["N. Daicos", "M. Bontempelli"])
+    output_path = tmp_path / "index.html"
+
+    render_leaderboard(leaderboard, round_votes, [], str(output_path), 2026)
+    html = output_path.read_text()
+
+    # 1. Generation timestamp embedded in a machine-readable, JS-parseable form:
+    #    an ISO 8601 UTC string in a data-generated-at attribute.
+    m = re.search(r'data-generated-at="([^"]+)"', html)
+    assert m, "expected a data-generated-at attribute carrying the ISO timestamp"
+    iso = m.group(1)
+    # Round-trips through strptime with the exact ISO-8601 Z format (which
+    # new Date(...) in the browser also parses reliably).
+    parsed = datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ")
+    assert parsed.year >= 2026
+
+    # 2. The warning banner element exists but is HIDDEN by default (only the JS
+    #    check reveals it, so a fresh page never flashes the warning).
+    assert 'id="stale-banner"' in html
+    banner = _element_with_id(html, "stale-banner")
+    assert "display: none" in banner  # hidden by default in the initial markup
+    assert "hasn't updated in over 10 days" in html  # warning message text
+
+    # 3. The staleness-check script is present with the 10-day threshold.
+    assert "stale-banner" in html
+    assert "getAttribute(\"data-generated-at\")" in html
+    assert "10 * 24 * 60 * 60 * 1000" in html  # 10-day threshold in ms
+
+
+def test_render_round_matrix_embeds_staleness_check(tmp_path):
+    leaderboard = pd.DataFrame({
+        "player": ["A. Alpha", "B. Bravo"],
+        "team": ["Richmond", "Collingwood"],
+        "predicted_season_votes": [8, 5],
+    })
+    round_votes = pd.DataFrame(
+        [
+            {"player": "A. Alpha", "round": "1", "votes": 3},
+            {"player": "B. Bravo", "round": "1", "votes": 2},
+        ],
+        columns=["player", "round", "votes"],
+    )
+    output_path = tmp_path / "rounds.html"
+
+    render_round_matrix(leaderboard, round_votes, str(output_path), 2026)
+    html = output_path.read_text()
+
+    m = re.search(r'data-generated-at="([^"]+)"', html)
+    assert m, "expected a data-generated-at attribute carrying the ISO timestamp"
+    parsed = datetime.strptime(m.group(1), "%Y-%m-%dT%H:%M:%SZ")
+    assert parsed.year >= 2026
+
+    assert 'id="stale-banner"' in html
+    banner = _element_with_id(html, "stale-banner")
+    assert "display: none" in banner  # hidden by default in the initial markup
+    assert "hasn't updated in over 10 days" in html  # warning message text
+
+    assert "getAttribute(\"data-generated-at\")" in html
+    assert "10 * 24 * 60 * 60 * 1000" in html
+
+
+def _element_with_id(html, element_id):
+    """Return the single opening `<...id="element_id"...>` tag as a string."""
+    idx = html.index('id="{}"'.format(element_id))
+    start = html.rindex("<", 0, idx)
+    end = html.index(">", idx) + 1
+    return html[start:end]
 
 
 def test_render_leaderboard_table_is_horizontally_scrollable(tmp_path):
