@@ -636,6 +636,32 @@ _MATRIX_TEMPLATE = """<!doctype html>
     color: var(--white);
     white-space: nowrap;
   }}
+  /* Freeze the player-name column so it stays pinned to the left edge of
+     .matrix-scroll while the (up to ~23) round columns scroll horizontally
+     beside it — otherwise, once scrolled a few columns in, the reader loses
+     track of whose row they are on. Only the name column is frozen (the narrow
+     rank "#" column scrolls underneath it). Each frozen cell needs a SOLID
+     background because the round cells scroll UNDER it and both the default
+     thead fill and the row-hover tint are translucent — a transparent frozen
+     cell would let the scrolling columns show through. The right border marks
+     where the frozen column ends and the scrollable region begins. z-index
+     stays low (1/2) — the only positioned elements on the page — so the frozen
+     cells sit above the scrolling content without shadowing any other UI. */
+  thead th.player-name-col,
+  tbody td.player {{
+    position: sticky;
+    left: 0;
+    border-right: 1px solid var(--line);
+  }}
+  tbody td.player {{ background: var(--panel); z-index: 1; }}
+  /* The header cell matches the darker thead fill (grass) rather than the
+     lighter panel used for body cells, so the frozen corner reads as part of
+     the header strip. */
+  thead th.player-name-col {{ background: var(--grass); z-index: 2; }}
+  /* Keep the frozen name cell opaque on row hover: the shared hover tint is
+     translucent gold, which would otherwise let scrolled round cells show
+     through the pinned name cell. */
+  tbody tr:hover td.player {{ background: var(--panel); }}
   /* Vote-count cell emphasis: 3 votes (best on ground) get the gold accent and
      bold so a reader can scan a row for a player's best rounds; 1-2 subdued, 0
      muted, and a round the player did not play the most muted of all. */
@@ -760,7 +786,9 @@ def render_round_matrix(
     }
 
     header_cells = ['            <th class="player-col">#</th>']
-    header_cells.append('            <th class="player-col">Player</th>')
+    header_cells.append(
+        '            <th class="player-col player-name-col">Player</th>'
+    )
     for rnd in all_rounds:
         header_cells.append(
             '            <th class="round-col">{r}</th>'.format(

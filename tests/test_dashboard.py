@@ -155,6 +155,60 @@ def test_render_round_matrix_builds_ordered_player_round_grid(tmp_path):
     assert 'href="index.html"' in html
 
 
+def test_render_round_matrix_freezes_player_name_column(tmp_path):
+    # The matrix is very wide (up to ~23 round columns + Total), scrolled
+    # horizontally inside .matrix-scroll. The player-name column must stay
+    # pinned to the left edge (position: sticky; left: 0) so the reader never
+    # loses track of whose row they are on once scrolled a few columns in.
+    leaderboard = pd.DataFrame({
+        "player": ["A. Alpha", "B. Bravo"],
+        "team": ["Richmond", "Collingwood"],
+        "predicted_season_votes": [8, 5],
+    })
+    round_votes = pd.DataFrame(
+        [
+            {"player": "A. Alpha", "round": "1", "votes": 3},
+            {"player": "B. Bravo", "round": "1", "votes": 2},
+        ],
+        columns=["player", "round", "votes"],
+    )
+    output_path = tmp_path / "rounds.html"
+
+    render_round_matrix(leaderboard, round_votes, str(output_path), 2026)
+    html = output_path.read_text()
+
+    # The player-name header cell carries a dedicated class so the sticky rule
+    # can target it WITHOUT also freezing the neighbouring rank ("#") header,
+    # which shares the generic .player-col class.
+    assert 'class="player-col player-name-col"' in html
+
+    # Normalise whitespace so "position: sticky" / "position:sticky" both match.
+    css = re.sub(r"\s+", " ", html)
+
+    # Both the header cell (.player-name-col) and every body cell (td.player)
+    # of the frozen column are targeted by a sticky, left-pinned rule.
+    sticky_rule = re.search(
+        r"([^{}]*\.player-name-col[^{}]*|[^{}]*td\.player[^{}]*)\{[^{}]*"
+        r"position: ?sticky[^{}]*\}",
+        css,
+    )
+    assert sticky_rule, "expected a position:sticky rule on the player-name column"
+    assert "left: 0" in sticky_rule.group(0) or "left:0" in sticky_rule.group(0)
+
+    # Confirm BOTH the header selector and the body-cell selector are sticky.
+    assert re.search(r"\.player-name-col[^{}]*\{[^{}]*position: ?sticky", css)
+    assert re.search(r"td\.player[^{}]*\{[^{}]*position: ?sticky", css)
+
+    # The frozen cells need a SOLID (non-transparent) background from the
+    # existing dark-theme palette so scrolling round columns don't show through.
+    assert re.search(
+        r"td\.player[^{}]*\{[^{}]*background: ?var\(--(panel|grass)\)", css
+    )
+    assert re.search(
+        r"\.player-name-col[^{}]*\{[^{}]*background: ?var\(--(panel|grass)\)", css
+    )
+
+
 def test_render_round_matrix_total_matches_row_sum(tmp_path):
     # When per_round_votes reconciles (as guaranteed by the real pipeline), the
     # Total column equals the sum of the visible round cells.
