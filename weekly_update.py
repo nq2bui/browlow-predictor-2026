@@ -14,7 +14,7 @@ from brownlow.footywire import SEASON_MATCH_LIST_URL_TEMPLATE, MATCH_STATS_URL_T
 from brownlow.dataset import assemble_match_records
 from brownlow.model import load_model
 from brownlow.weekly import accumulate_season_votes, per_round_votes
-from brownlow.dashboard import render_leaderboard
+from brownlow.dashboard import render_leaderboard, render_round_matrix
 from brownlow.odds import fetch_odds_page_html, parse_brownlow_odds
 from brownlow.http import fetch_url
 from brownlow.teams import canonicalize_team_name
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 CURRENT_SEASON = 2026
 MODEL_PATH = "model.txt"
 OUTPUT_PATH = "index.html"
+MATRIX_OUTPUT_PATH = "rounds.html"
 
 
 def build_current_season_dataframe(season: int, fetch=fetch_url) -> pd.DataFrame:
@@ -130,6 +131,11 @@ def main():
 
     render_leaderboard(leaderboard, round_votes, odds, OUTPUT_PATH)
     logger.info("wrote updated leaderboard to %s (%d players)", OUTPUT_PATH, len(leaderboard))
+
+    # Second page: the same round_votes rendered as an all-20 round-by-round
+    # matrix (reuses the round_votes DataFrame already computed above).
+    render_round_matrix(leaderboard, round_votes, MATRIX_OUTPUT_PATH)
+    logger.info("wrote round-by-round matrix to %s", MATRIX_OUTPUT_PATH)
 
 
 if __name__ == "__main__":
