@@ -106,6 +106,23 @@ _PAGE_TEMPLATE = """<!doctype html>
     color: var(--muted);
   }}
   th.implied {{ text-align: right; }}
+  /* Sortable column headers: clickable, with a small active-direction arrow.
+     Vanilla-JS driven (see the script at the bottom), no external library. */
+  th.sortable {{ cursor: pointer; user-select: none; }}
+  th.sortable:hover {{ color: var(--gold); }}
+  .sort-arrow {{ font-size: 9px; color: var(--gold); margin-left: 3px; }}
+  /* Model-vs-market divergence marker shown inside the player cell. Up = model
+     rates the player notably higher than the market (gold); down = market rates
+     them higher than the model (muted). Kept within the existing palette. */
+  .diverge {{
+    font-size: 11px;
+    font-weight: 800;
+    margin-right: 6px;
+    cursor: help;
+    vertical-align: middle;
+  }}
+  .diverge-up {{ color: var(--gold-bright); }}
+  .diverge-down {{ color: var(--muted); }}
   footer {{
     margin-top: 18px;
     color: var(--muted);
@@ -164,15 +181,15 @@ _PAGE_TEMPLATE = """<!doctype html>
   <p class="subtitle">Predicted top 20, updated after each round.</p>
   <p class="nav-link"><a href="rounds.html">View round-by-round matrix for all 20 &rarr;</a></p>
   <div class="card">
-    <table>
+    <table id="leaderboard-table">
       <thead>
         <tr>
           <th class="rank">#</th>
-          <th>Player</th>
-          <th>Team</th>
-          <th class="votes">Predicted votes</th>
-          <th class="odds">Odds</th>
-          <th class="implied">Implied %</th>
+          <th class="sortable" data-sort-index="1" data-sort-type="text">Player<span class="sort-arrow"></span></th>
+          <th class="sortable" data-sort-index="2" data-sort-type="text">Team<span class="sort-arrow"></span></th>
+          <th class="votes sortable" data-sort-index="3" data-sort-type="number">Predicted votes<span class="sort-arrow"></span></th>
+          <th class="odds sortable" data-sort-index="4" data-sort-type="number">Odds<span class="sort-arrow"></span></th>
+          <th class="implied sortable" data-sort-index="5" data-sort-type="number">Implied %<span class="sort-arrow"></span></th>
         </tr>
       </thead>
       <tbody>
@@ -226,6 +243,51 @@ function renderDetail(player) {{
 }}
 select.addEventListener("change", function() {{ renderDetail(select.value); }});
 if (select.options.length > 0) {{ renderDetail(select.options[0].value); }}
+
+// Client-side sortable leaderboard columns. Sorts the visible rows by each
+// cell's raw data-sort-value (numeric or text) rather than the formatted
+// display text, so "$1.20" sorts as 1.20 and "83%" as 83. Rows with no
+// underlying value (e.g. players with no Sportsbet odds) always sink to the
+// bottom regardless of direction. Default (unsorted) order is model rank.
+(function() {{
+  const table = document.getElementById("leaderboard-table");
+  if (!table) return;
+  const tbody = table.querySelector("tbody");
+  let sortIndex = null;
+  let sortDir = 1;
+  function clearArrows() {{
+    const arrows = table.querySelectorAll("th.sortable .sort-arrow");
+    for (const a of arrows) {{ a.textContent = ""; }}
+  }}
+  function sortBy(th) {{
+    const index = parseInt(th.getAttribute("data-sort-index"), 10);
+    const type = th.getAttribute("data-sort-type");
+    if (sortIndex === index) {{ sortDir = -sortDir; }}
+    else {{ sortIndex = index; sortDir = 1; }}
+    const rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+    rows.sort(function(a, b) {{
+      const av = a.children[index].getAttribute("data-sort-value");
+      const bv = b.children[index].getAttribute("data-sort-value");
+      const aMiss = av === null || av === "";
+      const bMiss = bv === null || bv === "";
+      if (aMiss && bMiss) return 0;
+      if (aMiss) return 1;
+      if (bMiss) return -1;
+      let cmp;
+      if (type === "number") {{ cmp = parseFloat(av) - parseFloat(bv); }}
+      else {{ cmp = av.localeCompare(bv); }}
+      return cmp * sortDir;
+    }});
+    for (const r of rows) {{ tbody.appendChild(r); }}
+    clearArrows();
+    const arrow = th.querySelector(".sort-arrow");
+    if (arrow) {{ arrow.textContent = sortDir === 1 ? "\\u25B2" : "\\u25BC"; }}
+  }}
+  const headers = table.querySelectorAll("th.sortable");
+  for (const th of headers) {{
+    th.addEventListener("click", function() {{ sortBy(th); }});
+  }}
+}})();
 </script>
 </body>
 </html>
@@ -234,16 +296,21 @@ if (select.options.length > 0) {{ renderDetail(select.options[0].value); }}
 _ROW_TEMPLATE = (
     '        <tr>'
     '<td class="rank" style="border-left-color: {color};">{rank}</td>'
-    '<td class="player">{player}</td>'
-    '<td class="team-cell"><span class="team-inner">{logo}<span>{team}</span></span></td>'
-    '<td class="votes">{votes:.1f}</td>'
-    '<td class="odds">{odds}</td>'
-    '<td class="implied">{implied}</td>'
+    '<td class="player" data-sort-value="{player_sort}">{diverge}{player}</td>'
+    '<td class="team-cell" data-sort-value="{team_sort}"><span class="team-inner">{logo}<span>{team}</span></span></td>'
+    '<td class="votes" data-sort-value="{votes_sort}">{votes:.1f}</td>'
+    '<td class="odds" data-sort-value="{odds_sort}">{odds}</td>'
+    '<td class="implied" data-sort-value="{implied_sort}">{implied}</td>'
     '</tr>'
 )
 
 # Placeholder for a leaderboard player not present in the Sportsbet market.
 _NO_ODDS = "—"
+
+# Minimum gap between a player's model rank and market rank before we flag the
+# disagreement. Among only ~20 players, 5 positions is a substantial move that's
+# genuinely interesting to surface without cluttering near-agreements.
+_DIVERGENCE_THRESHOLD = 5
 
 
 def render_leaderboard(
@@ -257,6 +324,24 @@ def render_leaderboard(
     odds_by_player = {o["player"]: o["decimal_odds"] for o in odds}
 
     top20 = leaderboard.head(20)
+
+    # Market rank: rank ONLY the top-20 players who have real odds by decimal
+    # odds ascending (lower odds = more likely = better rank). Ties break by
+    # model position so the ordering is deterministic. Model rank is the row's
+    # 1-based position. A meaningful gap between the two ranks is flagged with a
+    # divergence marker. Players with no odds get no market rank (nothing to
+    # compare against).
+    odds_positions = [
+        (i, odds_by_player[str(row.player)])
+        for i, row in enumerate(top20.itertuples())
+        if str(row.player) in odds_by_player
+    ]
+    odds_positions.sort(key=lambda pair: (pair[1], pair[0]))
+    market_rank_by_index = {
+        model_index: rank
+        for rank, (model_index, _odds) in enumerate(odds_positions, start=1)
+    }
+
     rows = []
     for i, row in enumerate(top20.itertuples()):
         info = get_team_info(str(row.team))
@@ -274,20 +359,47 @@ def render_leaderboard(
         if decimal_odds is None:
             odds_display = _NO_ODDS
             implied_display = _NO_ODDS
+            odds_sort = ""
+            implied_sort = ""
         else:
+            implied = implied_probability(decimal_odds)
             odds_display = "${:.2f}".format(decimal_odds)
-            implied_display = "{:.0f}%".format(implied_probability(decimal_odds))
+            implied_display = "{:.0f}%".format(implied)
+            odds_sort = "{:.2f}".format(decimal_odds)
+            implied_sort = "{:.4f}".format(implied)
+
+        # Divergence marker (only when the player has a market rank to compare).
+        diverge = ""
+        model_rank = i + 1
+        market_rank = market_rank_by_index.get(i)
+        if market_rank is not None and abs(model_rank - market_rank) >= _DIVERGENCE_THRESHOLD:
+            title = "Model #{}, Market #{}".format(model_rank, market_rank)
+            if model_rank < market_rank:
+                # Model rates this player notably higher than the market does.
+                cls, symbol = "diverge-up", "▲"
+            else:
+                # Market rates this player notably higher than the model does.
+                cls, symbol = "diverge-down", "▼"
+            diverge = '<span class="diverge {cls}" title="{title}">{symbol}</span>'.format(
+                cls=cls, title=html.escape(title), symbol=symbol
+            )
 
         rows.append(
             _ROW_TEMPLATE.format(
-                rank=i + 1,
+                rank=model_rank,
                 player=html.escape(str(row.player)),
+                player_sort=html.escape(str(row.player).lower()),
                 team=html.escape(str(row.team)),
+                team_sort=html.escape(str(row.team).lower()),
                 votes=row.predicted_season_votes,
+                votes_sort=html.escape("{:.4f}".format(float(row.predicted_season_votes))),
                 color=info["color"],
                 logo=logo,
                 odds=odds_display,
+                odds_sort=odds_sort,
                 implied=implied_display,
+                implied_sort=implied_sort,
+                diverge=diverge,
             )
         )
     rows_html = "\n".join(rows)

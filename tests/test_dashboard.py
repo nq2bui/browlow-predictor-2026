@@ -186,3 +186,95 @@ def test_render_leaderboard_shows_odds_columns_and_placeholder(tmp_path):
     assert "10%" in html
     # Unmatched leaderboard player shows an em-dash placeholder, not a crash/blank.
     assert "—" in html
+
+
+def test_render_leaderboard_has_sort_attributes_and_script(tmp_path):
+    leaderboard = pd.DataFrame({
+        "player": ["N. Daicos", "M. Bontempelli", "J. Nomatch"],
+        "team": ["Collingwood", "Western Bulldogs", "Richmond"],
+        "predicted_season_votes": [30.0, 25.0, 20.0],
+    })
+    round_votes = _round_votes_for(["N. Daicos", "M. Bontempelli", "J. Nomatch"])
+    odds = [
+        {"player": "N. Daicos", "decimal_odds": 1.20},
+        {"player": "M. Bontempelli", "decimal_odds": 10.00},
+    ]
+    output_path = tmp_path / "index.html"
+
+    render_leaderboard(leaderboard, round_votes, odds, str(output_path))
+    html = output_path.read_text()
+
+    # Sortable headers carry the column index + type metadata the JS reads.
+    assert 'id="leaderboard-table"' in html
+    assert 'class="sortable"' in html or 'sortable"' in html
+    assert 'data-sort-index="4"' in html  # odds column
+    assert 'data-sort-type="number"' in html
+
+    # Cells expose the RAW value for sorting, distinct from the display text.
+    # Votes: raw number, not the "30.0" display-formatted string only.
+    assert 'data-sort-value="30.0000"' in html
+    # Odds: raw decimal odds (1.20), not the "$1.20" display string.
+    assert 'data-sort-value="1.20"' in html
+    assert 'data-sort-value="10.00"' in html
+    # Implied %: raw probability (1/1.20*100 = 83.33...), not the "83%" string.
+    assert 'data-sort-value="83.3333"' in html
+    # Player with no odds: empty sort value so it consistently sinks to bottom.
+    assert 'class="odds" data-sort-value=""' in html
+    assert 'class="implied" data-sort-value=""' in html
+
+    # The sort script logic is present in the output.
+    assert "getAttribute(\"data-sort-value\")" in html
+    assert "sortBy" in html
+    assert "localeCompare" in html
+
+
+def test_render_leaderboard_divergence_indicator(tmp_path):
+    # 8 players in model order (season votes descending). Odds are deliberately
+    # REVERSED vs the model, so the model's #1 is the market's worst and vice
+    # versa, guaranteeing large model-vs-market rank gaps. P8 has NO odds.
+    players = [f"P{i}" for i in range(1, 9)]
+    leaderboard = pd.DataFrame({
+        "player": players,
+        "team": ["Richmond"] * 8,
+        "predicted_season_votes": [80, 70, 60, 50, 40, 30, 20, 10],
+    })
+    round_votes = _round_votes_for(players)
+    # Odds ascending with model rank => market rank is the reverse of model rank
+    # for P1..P7. P8 intentionally has no odds.
+    odds = [
+        {"player": "P1", "decimal_odds": 100.0},  # model #1, market #7
+        {"player": "P2", "decimal_odds": 90.0},
+        {"player": "P3", "decimal_odds": 80.0},
+        {"player": "P4", "decimal_odds": 70.0},   # model #4, market #4 (no gap)
+        {"player": "P5", "decimal_odds": 60.0},
+        {"player": "P6", "decimal_odds": 50.0},
+        {"player": "P7", "decimal_odds": 40.0},   # model #7, market #1
+    ]
+    output_path = tmp_path / "index.html"
+
+    render_leaderboard(leaderboard, round_votes, odds, str(output_path))
+    html = output_path.read_text()
+
+    # P1: model #1 vs market #7 (gap 6 >= 5) -> model likes them MORE -> up marker.
+    assert 'class="diverge diverge-up" title="Model #1, Market #7"' in html
+    # P7: model #7 vs market #1 (gap 6) -> market likes them more -> down marker.
+    assert 'class="diverge diverge-down" title="Model #7, Market #1"' in html
+
+    # P4: model #4 vs market #4 (gap 0 < 5) -> NO marker for this player.
+    # Isolate P4's row and confirm no diverge span within it.
+    p4_row = _row_containing(html, ">P4<")
+    assert "diverge" not in p4_row
+
+    # P8: no odds at all -> no market rank -> no divergence marker, and shows the
+    # em-dash odds placeholder just like before.
+    p8_row = _row_containing(html, ">P8<")
+    assert "diverge" not in p8_row
+    assert 'data-sort-value=""' in p8_row
+
+
+def _row_containing(html, needle):
+    """Return the single <tr>...</tr> block that contains ``needle``."""
+    idx = html.index(needle)
+    start = html.rindex("<tr>", 0, idx)
+    end = html.index("</tr>", idx) + len("</tr>")
+    return html[start:end]
