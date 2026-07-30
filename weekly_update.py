@@ -146,12 +146,12 @@ def main():
         logger.warning("could not fetch/parse Sportsbet Brownlow odds, continuing without them: %s", e)
         odds = []
 
-    render_leaderboard(leaderboard, round_votes, odds, OUTPUT_PATH)
+    render_leaderboard(leaderboard, round_votes, odds, OUTPUT_PATH, CURRENT_SEASON)
     logger.info("wrote updated leaderboard to %s (%d players)", OUTPUT_PATH, len(leaderboard))
 
     # Second page: the same round_votes rendered as an all-20 round-by-round
     # matrix (reuses the round_votes DataFrame already computed above).
-    render_round_matrix(leaderboard, round_votes, MATRIX_OUTPUT_PATH)
+    render_round_matrix(leaderboard, round_votes, MATRIX_OUTPUT_PATH, CURRENT_SEASON)
     logger.info("wrote round-by-round matrix to %s", MATRIX_OUTPUT_PATH)
 
 

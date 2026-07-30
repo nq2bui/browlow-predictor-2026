@@ -8,6 +8,40 @@ from brownlow.odds import implied_probability
 from brownlow.teams import get_team_info
 from brownlow.weekly import round_sort_key
 
+# AFL seasons that have an official, UNNUMBERED "Opening Round" played before
+# the AFL's own "Round 1". afltables.com labels that opening round as "Round: 1"
+# in its match-header `round` field, which shifts every afltables numeric round
+# label ONE AHEAD of the AFL's official label for the whole season (afltables
+# "Round 1" == AFL "Opening Round", afltables "Round N" (N>=2) == AFL "Round
+# N-1"). This mismatch is DISPLAY-ONLY: `round` is a grouping/display field, not
+# a model feature, so predictions/training are unaffected. We correct the shown
+# label here for confirmed seasons only. 2026 is confirmed (AFL's 2026 Opening
+# Round started 2026-03-05, Round 1 on 2026-03-12); historical seasons are NOT
+# relabeled unless/until an Opening Round convention is confirmed for them.
+# WARNING to future readers: do not "simplify" this away — the raw afltables
+# round number really is off by one for these seasons.
+_OPENING_ROUND_SEASONS = {2026}
+
+
+def display_round_label(round_str: str, season: int) -> str:
+    """Map an afltables `round` string to the label shown to users.
+
+    For seasons with an Opening Round (see `_OPENING_ROUND_SEASONS`), afltables'
+    "Round 1" is really the AFL's "Opening Round" and every later numeric round
+    is one ahead of the AFL's official number, so we shift numeric labels down by
+    one for display. Non-numeric labels (finals codes like QF/SF/PF/GF) always
+    pass through unchanged. For seasons WITHOUT an Opening Round, a numeric label
+    is simply prefixed with "Round " and non-numeric labels pass through.
+    """
+    round_str = str(round_str)
+    if season not in _OPENING_ROUND_SEASONS:
+        return f"Round {round_str}" if round_str.isdigit() else round_str
+    if round_str == "1":
+        return "Opening Round"
+    if round_str.isdigit():
+        return f"Round {int(round_str) - 1}"
+    return round_str  # non-numeric labels (e.g. finals "QF"/"SF"/"PF"/"GF")
+
 _PAGE_TEMPLATE = """<!doctype html>
 <html>
 <head>
@@ -336,6 +370,7 @@ def render_leaderboard(
     round_votes: pd.DataFrame,
     odds: list[dict],
     output_path: str,
+    season: int,
 ) -> None:
     # Index odds by the already-normalized "F. Surname" join key so a direct
     # string match against the (identically normalized) leaderboard player works.
@@ -427,13 +462,19 @@ def render_leaderboard(
     top20_players = [str(row.player) for row in top20.itertuples()]
 
     # Build the per-player round list from round_votes, preserving its existing
-    # round ordering (per_round_votes already sorts numeric-then-finals).
+    # round ordering (per_round_votes already sorts numeric-then-finals). Only the
+    # DISPLAY label is relabeled (via display_round_label) to correct afltables'
+    # Opening-Round off-by-one for the current season; the underlying ordering is
+    # untouched (rows arrive pre-sorted by the real round value).
     round_data = {name: [] for name in top20_players}
     for rv in round_votes.itertuples():
         player = str(rv.player)
         if player in round_data:
             round_data[player].append(
-                {"round": str(rv.round), "votes": int(rv.votes)}
+                {
+                    "round": display_round_label(str(rv.round), season),
+                    "votes": int(rv.votes),
+                }
             )
     # json.dumps safely escapes strings for the JS/JSON context (no manual
     # formatting), guarding against injection via player/round values.
@@ -605,6 +646,7 @@ def render_round_matrix(
     leaderboard: pd.DataFrame,
     round_votes: pd.DataFrame,
     output_path: str,
+    season: int,
 ) -> None:
     """Render a top-20 x per-round vote matrix to a self-contained HTML file.
 
@@ -623,6 +665,8 @@ def render_round_matrix(
     top20_players = [str(row.player) for row in top20.itertuples()]
 
     # Full set of rounds played by ANY top-20 player, in real season order.
+    # Sort by the RAW round value (round_sort_key) so ordering stays correct;
+    # the Opening-Round relabeling below is applied only to the displayed header.
     all_rounds = sorted(
         {str(rv.round) for rv in round_votes.itertuples()}, key=round_sort_key
     )
@@ -641,7 +685,9 @@ def render_round_matrix(
     header_cells.append('            <th class="player-col">Player</th>')
     for rnd in all_rounds:
         header_cells.append(
-            '            <th class="round-col">{r}</th>'.format(r=html.escape(rnd))
+            '            <th class="round-col">{r}</th>'.format(
+                r=html.escape(display_round_label(rnd, season))
+            )
         )
     header_cells.append('            <th class="total-col">Total</th>')
     header_html = "\n".join(header_cells)

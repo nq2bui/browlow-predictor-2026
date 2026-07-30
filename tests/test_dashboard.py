@@ -3,7 +3,32 @@ import re
 
 import pandas as pd
 
-from brownlow.dashboard import render_leaderboard, render_round_matrix
+from brownlow.dashboard import (
+    display_round_label,
+    render_leaderboard,
+    render_round_matrix,
+)
+
+
+def test_display_round_label_opening_round_season_shifts_numeric_labels():
+    # 2026 has an unnumbered AFL Opening Round that afltables labels "Round 1",
+    # shifting every afltables numeric round one ahead of the AFL's own label.
+    assert display_round_label("1", 2026) == "Opening Round"
+    assert display_round_label("2", 2026) == "Round 1"
+    assert display_round_label("21", 2026) == "Round 20"
+    # Non-numeric finals codes pass through unchanged even for a 2026 season.
+    assert display_round_label("QF", 2026) == "QF"
+    assert display_round_label("GF", 2026) == "GF"
+
+
+def test_display_round_label_non_opening_round_season_is_not_shifted():
+    # A season NOT in _OPENING_ROUND_SEASONS must NOT get Opening-Round treatment:
+    # "1" stays "Round 1" (this guards against applying the fix to history).
+    assert display_round_label("1", 2015) == "Round 1"
+    assert display_round_label("2", 2015) == "Round 2"
+    assert display_round_label("21", 2015) == "Round 21"
+    # Non-numeric labels pass through unchanged for non-opening seasons too.
+    assert display_round_label("QF", 2015) == "QF"
 
 
 def _round_votes_for(players, rounds=("1", "2", "10")):
@@ -20,10 +45,12 @@ def test_render_leaderboard_writes_top_20_table(tmp_path):
         "team": ["Richmond"] * 25,
         "predicted_season_votes": [25 - i for i in range(25)],
     })
-    round_votes = _round_votes_for([f"Player{i}" for i in range(25)])
+    round_votes = _round_votes_for(
+        [f"Player{i}" for i in range(25)], rounds=("1", "5", "10")
+    )
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, [], str(output_path))
+    render_leaderboard(leaderboard, round_votes, [], str(output_path), 2026)
 
     html = output_path.read_text()
     assert "Player0" in html
@@ -47,11 +74,17 @@ def test_render_leaderboard_writes_top_20_table(tmp_path):
     data = json.loads(blob)
     assert "Player0" in data
     assert "Player20" not in data
+    # 2026 season: afltables round "1" -> "Opening Round", "5" -> "Round 4",
+    # "10" -> "Round 9" (Opening-Round off-by-one corrected for DISPLAY only).
     assert data["Player0"] == [
-        {"round": "1", "votes": 2},
-        {"round": "2", "votes": 2},
-        {"round": "10", "votes": 2},
+        {"round": "Opening Round", "votes": 2},
+        {"round": "Round 4", "votes": 2},
+        {"round": "Round 9", "votes": 2},
     ]
+    # The corrected labels are what's embedded; the raw shifted labels are not.
+    assert '"round": "Opening Round"' in html
+    assert '"round": "Round 4"' in html
+    assert '"round": "Round 5"' not in html
 
 
 def test_render_round_matrix_builds_ordered_player_round_grid(tmp_path):
@@ -81,16 +114,18 @@ def test_render_round_matrix_builds_ordered_player_round_grid(tmp_path):
     )
     output_path = tmp_path / "rounds.html"
 
-    render_round_matrix(leaderboard, round_votes, str(output_path))
+    render_round_matrix(leaderboard, round_votes, str(output_path), 2026)
 
     html = output_path.read_text()
 
     # Players appear in leaderboard order.
     assert html.index("A. Alpha") < html.index("B. Bravo") < html.index("C. Charlie")
 
-    # Round column headers appear in proper numeric order: 1, 2, 10 (not 1, 10, 2).
+    # Headers stay in real season order (sorted by RAW round 1, 2, 10 — not 1, 10,
+    # 2) but are DISPLAY-relabeled for the 2026 Opening-Round off-by-one: afltables
+    # "1" -> "Opening Round", "2" -> "Round 1", "10" -> "Round 9".
     header_cells = re.findall(r'<th[^>]*class="round-col"[^>]*>(.*?)</th>', html)
-    assert header_cells == ["1", "2", "10"]
+    assert header_cells == ["Opening Round", "Round 1", "Round 9"]
 
     # A "Total" column header exists.
     assert "Total" in html
@@ -136,7 +171,7 @@ def test_render_round_matrix_total_matches_row_sum(tmp_path):
     )
     output_path = tmp_path / "rounds.html"
 
-    render_round_matrix(leaderboard, round_votes, str(output_path))
+    render_round_matrix(leaderboard, round_votes, str(output_path), 2026)
     html = output_path.read_text()
     assert 'class="total">6<' in html
 
@@ -150,7 +185,7 @@ def test_render_leaderboard_omits_logo_for_unknown_team(tmp_path):
     round_votes = _round_votes_for(["Nobody"])
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, [], str(output_path))
+    render_leaderboard(leaderboard, round_votes, [], str(output_path), 2026)
 
     html = output_path.read_text()
     # Unknown team degrades gracefully: no broken logo <img>, neutral swatch instead.
@@ -173,7 +208,7 @@ def test_render_leaderboard_shows_odds_columns_and_placeholder(tmp_path):
     ]
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, odds, str(output_path))
+    render_leaderboard(leaderboard, round_votes, odds, str(output_path), 2026)
 
     html = output_path.read_text()
     # New column headers present.
@@ -201,7 +236,7 @@ def test_render_leaderboard_has_sort_attributes_and_script(tmp_path):
     ]
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, odds, str(output_path))
+    render_leaderboard(leaderboard, round_votes, odds, str(output_path), 2026)
     html = output_path.read_text()
 
     # Sortable headers carry the column index + type metadata the JS reads.
@@ -241,7 +276,7 @@ def test_render_leaderboard_table_is_horizontally_scrollable(tmp_path):
     round_votes = _round_votes_for(["N. Daicos", "M. Bontempelli"])
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, [], str(output_path))
+    render_leaderboard(leaderboard, round_votes, [], str(output_path), 2026)
     html = output_path.read_text()
 
     # The scroll mechanism itself: a class with overflow-x styling.
@@ -285,7 +320,7 @@ def test_render_leaderboard_divergence_indicator(tmp_path):
     ]
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, round_votes, odds, str(output_path))
+    render_leaderboard(leaderboard, round_votes, odds, str(output_path), 2026)
     html = output_path.read_text()
 
     # P1: model #1 vs market #7 (gap 6 >= 5) -> model likes them MORE -> up marker.
