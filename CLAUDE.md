@@ -127,9 +127,9 @@ full data source research and rationale.
   position per player for the whole year, so a mid-season role change isn't
   captured, and combo/hybrid players are collapsed to their primary role.
 
-- **Backtest hit rates on the improved 15-feature, better-joined 2012-2025
-  data: 50% (2024 holdout), 25% (2025 holdout)** — both very slightly LOWER
-  than the pre-fix 14-feature run (60%/30%). This is not read as evidence the
+- **Backtest hit rates on the 15-feature, better-joined 2012-2025 data: 50%
+  (2024 holdout), 25% (2025 holdout)** — both very slightly LOWER than the
+  original pre-fix 14-feature run (60%/30%). This is not read as evidence the
   join-gap fix or `team_margin` made things worse: `team_margin` is the
   model's 4th-highest feature by gain (`model.feature_importance("gain")`),
   well above several stats that were already trusted (contested_possessions,
@@ -139,9 +139,25 @@ full data source research and rationale.
   by 5-10 points, so a single before/after comparison at this sample size
   isn't strong evidence either way. Shipped as-is (decided 2026-07-30)
   since the underlying data quality is objectively better (join rate) and
-  the new feature has real, measured signal — but treat both this number
+  `team_margin` has real, measured signal — but treat both this number
   and the 60%/30% one it replaced as noisy, not as a reliable trend.
   Note `score_involvements`/`intercepts` are still 0 for all of 2012-2014
   regardless of the join fix (these stats don't exist on footywire before
   2015 at all — see Data Sources), so roughly a fifth of the training
-  window has only 13 of the 15 features populated.
+  window has only 13 of the 15 stat features populated.
+
+- **Position features (16th-19th) add measured signal but very little of
+  it.** Retraining on the full 19-feature, 123,166-row dataset (98% of rows —
+  120,843 — got a real roster-matched position, only 2 transient network
+  timeouts across the whole 14-season backfill) produced the EXACT SAME
+  backtest hit rates as the 15-feature run: 50%/25%. `model.feature_importance("gain")`
+  confirms why: `position_forward`/`position_midfield`/`position_ruck`/
+  `position_defender` rank 124.1/86.1/62.1/45.1 respectively — genuinely
+  used (nonzero), but 2-3 orders of magnitude below every other feature
+  (the next-lowest, `behinds`, is 212.1; the top feature, `disposals`, is
+  34,979.4). Read this as position being largely redundant with the stat
+  profile already in the other 15 features — a ruckman's hitout count and a
+  defender's disposal/mark pattern already implicitly encode "position-like"
+  signal for a tree model, so the explicit one-hot columns add only a small
+  residual on top. Shipped as-is (decided 2026-07-30): the feature is
+  well-motivated and genuinely non-zero, just not a strong lever on its own.
