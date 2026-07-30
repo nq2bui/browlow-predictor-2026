@@ -72,11 +72,33 @@ def test_parse_advanced_stats_page():
     assert florent["team"] == "Sydney"
     assert florent["score_involvements"] == 7
     assert florent["intercepts"] == 2
+    # 8 additional advanced-stats columns parsed from the same fetched page.
+    # Real values traced directly from the fixture's O Florent row (Sydney):
+    # UP=17, ED=19, DE%=73.1, MI5=1, 1%=0, CCL=0, MG=645, T5=0.
+    assert florent["uncontested_possessions"] == 17
+    assert florent["effective_disposals"] == 19
+    assert florent["disposal_efficiency"] == 73.1  # float percentage, not int
+    assert florent["marks_inside_50"] == 1
+    assert florent["one_percenters"] == 0
+    assert florent["centre_clearances"] == 0
+    assert florent["metres_gained"] == 645
+    assert florent["tackles_inside_50"] == 0
 
     selwood = next(r for r in rows if r["player"] == "J Selwood")
     assert selwood["team"] == "Geelong"
     assert selwood["score_involvements"] == 9
     assert selwood["intercepts"] == 7
+    # Real values traced from the fixture's J Selwood row (Geelong):
+    # UP=17, ED=22, DE%=75.9, MI5=0, 1%=1, CCL=4, MG=369, T5=2 -- deliberately
+    # covers nonzero one_percenters / centre_clearances / tackles_inside_50.
+    assert selwood["uncontested_possessions"] == 17
+    assert selwood["effective_disposals"] == 22
+    assert selwood["disposal_efficiency"] == 75.9
+    assert selwood["marks_inside_50"] == 0
+    assert selwood["one_percenters"] == 1
+    assert selwood["centre_clearances"] == 4
+    assert selwood["metres_gained"] == 369
+    assert selwood["tackles_inside_50"] == 2
 
 
 def test_parse_advanced_stats_page_skips_unused_substitute_rows():

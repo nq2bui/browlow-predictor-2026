@@ -81,11 +81,34 @@ def parse_advanced_stats_page(html: str) -> list[dict]:
         # 2012. When a column is absent for this page/table, default its stat to
         # 0 for every player rather than crashing on headers.index(...), matching
         # how the pipeline already treats data it can't find.
-        si_index = headers.index("SI") - 1 if "SI" in headers else None
-        itc_index = headers.index("ITC") - 1 if "ITC" in headers else None
+        # -1 on every index for the same reason as SI/ITC above: headers
+        # includes "Player" (index 0) but the tds after the player cell (values)
+        # don't, so a header at index N maps to values index N-1. All of these
+        # newer advanced-stats columns are absent on footywire's pre-2015 pages
+        # (the smaller 11-column set), so each is guarded with "in headers" and
+        # defaults to 0 for every player when the column doesn't exist.
+        def col_index(name):
+            return headers.index(name) - 1 if name in headers else None
+
+        si_index = col_index("SI")
+        itc_index = col_index("ITC")
+        up_index = col_index("UP")
+        ed_index = col_index("ED")
+        de_index = col_index("DE%")
+        mi5_index = col_index("MI5")
+        onep_index = col_index("1%")
+        ccl_index = col_index("CCL")
+        mg_index = col_index("MG")
+        t5_index = col_index("T5")
         # Highest column index this table actually needs to read; used to skip
-        # short rows. None when neither column is present (nothing to read).
-        needed_indices = [i for i in (si_index, itc_index) if i is not None]
+        # short rows (e.g. the 2-cell "Unused Substitute" row). None-safe: only
+        # present columns contribute. -1 when none are present (nothing to read).
+        needed_indices = [
+            i for i in (
+                si_index, itc_index, up_index, ed_index, de_index, mi5_index,
+                onep_index, ccl_index, mg_index, t5_index,
+            ) if i is not None
+        ]
         max_needed = max(needed_indices) if needed_indices else -1
 
         for tr in table.find_all("tr", class_=["darkcolor", "lightcolor"]):
@@ -115,11 +138,28 @@ def parse_advanced_stats_page(html: str) -> list[dict]:
                     return 0
                 return int(values[index]) if values[index].replace(".", "").isdigit() else 0
 
+            def stat_float(index):
+                # disposal_efficiency (DE%) is a percentage like "73.1", not a
+                # whole integer, so it must parse with float() -- int("73.1")
+                # would raise. The digit check ("73.1".replace(".","").isdigit()
+                # -> True) is shared, but the cast is float, not int.
+                if index is None:
+                    return 0
+                return float(values[index]) if values[index].replace(".", "").isdigit() else 0
+
             rows.append({
                 "team": team,
                 "player": player,
                 "score_involvements": stat(si_index),
                 "intercepts": stat(itc_index),
+                "uncontested_possessions": stat(up_index),
+                "effective_disposals": stat(ed_index),
+                "disposal_efficiency": stat_float(de_index),
+                "marks_inside_50": stat(mi5_index),
+                "one_percenters": stat(onep_index),
+                "centre_clearances": stat(ccl_index),
+                "metres_gained": stat(mg_index),
+                "tackles_inside_50": stat(t5_index),
             })
     return rows
 

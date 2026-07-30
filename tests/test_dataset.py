@@ -24,20 +24,27 @@ ADELAIDE_HAWTHORN_FIXTURE = Path(
 ).read_text()
 
 
-def test_stat_columns_has_19_entries():
-    assert len(STAT_COLUMNS) == 19
+def test_stat_columns_has_27_entries():
+    assert len(STAT_COLUMNS) == 27
     assert STAT_COLUMNS[:8] == [
         "kicks", "handballs", "disposals", "marks",
         "goals", "behinds", "hitouts", "tackles",
     ]
-    # The 4 one-hot position columns are appended last so the existing 15
-    # columns keep their ordering (score_involvements, intercepts, team_margin
-    # precede them).
+    # The 8 additional footywire advanced-stats columns sit after the original
+    # score_involvements/intercepts and before team_margin.
+    assert STAT_COLUMNS[14:22] == [
+        "uncontested_possessions", "effective_disposals", "disposal_efficiency",
+        "marks_inside_50", "one_percenters", "centre_clearances", "metres_gained",
+        "tackles_inside_50",
+    ]
+    # The 4 one-hot position columns are appended last so the existing 23
+    # columns keep their ordering (the footywire stats and team_margin precede
+    # them).
     assert POSITION_COLUMNS == [
         "position_forward", "position_midfield", "position_defender", "position_ruck",
     ]
     assert STAT_COLUMNS[-4:] == POSITION_COLUMNS
-    assert STAT_COLUMNS[-7:-4] == ["score_involvements", "intercepts", "team_margin"]
+    assert STAT_COLUMNS[-5] == "team_margin"
 
 
 def test_normalize_position_buckets_raw_strings():
@@ -196,6 +203,14 @@ def test_assemble_match_records_joins_footywire_stats():
     # no matching footywire player in this fixture -> defaults to 0, not a crash
     assert bolton["score_involvements"] == 0
     assert bolton["intercepts"] == 0
+    # The 8 new footywire-sourced columns also default to 0 on a footywire miss,
+    # exactly like score_involvements/intercepts (they share _FOOTYWIRE_ONLY_COLUMNS).
+    for col in [
+        "uncontested_possessions", "effective_disposals", "disposal_efficiency",
+        "marks_inside_50", "one_percenters", "centre_clearances", "metres_gained",
+        "tackles_inside_50",
+    ]:
+        assert bolton[col] == 0, col
 
 
 def test_assemble_match_records_without_footywire_data():
@@ -207,6 +222,14 @@ def test_assemble_match_records_without_footywire_data():
     )
     assert len(records) == 6
     assert all(r["score_involvements"] == 0 and r["intercepts"] == 0 for r in records)
+    # All 8 new footywire-only columns also default to 0 when there is no
+    # footywire data at all for the match.
+    footywire_only = [
+        "uncontested_possessions", "effective_disposals", "disposal_efficiency",
+        "marks_inside_50", "one_percenters", "centre_clearances", "metres_gained",
+        "tackles_inside_50",
+    ]
+    assert all(r[col] == 0 for r in records for col in footywire_only)
 
 
 def test_assemble_match_records_joins_across_team_name_alias():

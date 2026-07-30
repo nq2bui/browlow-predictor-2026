@@ -30,18 +30,32 @@ STAT_COLUMNS = [
     "kicks", "handballs", "disposals", "marks", "goals", "behinds", "hitouts", "tackles",
     "clearances", "contested_possessions", "contested_marks", "goal_assists",
     "score_involvements", "intercepts",
-    # team_margin is appended after the original 14 so they keep their order.
-    # It captures the well-documented winning-team bias in Brownlow voting:
-    # the player's team's final score minus the opponent's for that match.
+    # 8 additional footywire advanced-stats columns, parsed from the SAME
+    # already-fetched ft_match_statistics?advv=Y page as score_involvements/
+    # intercepts (no new network requests). All integer counts EXCEPT
+    # disposal_efficiency, which is a percentage float (e.g. 73.1). Like SI/ITC
+    # they don't exist on footywire's pre-2015 pages and default to 0 there, and
+    # they default to 0 when no footywire row joins onto an afltables player.
+    "uncontested_possessions", "effective_disposals", "disposal_efficiency",
+    "marks_inside_50", "one_percenters", "centre_clearances", "metres_gained",
+    "tackles_inside_50",
+    # team_margin is appended after the footywire stats so the originals keep
+    # their order. It captures the well-documented winning-team bias in Brownlow
+    # voting: the player's team's final score minus the opponent's for that match.
     "team_margin",
-    # The 4 one-hot position columns are appended last (after the original 15)
-    # so all earlier columns keep their ordering. They are NOT populated by
-    # assemble_match_records -- that stays a pure per-match afltables+footywire
-    # function -- but by add_position_features as a whole-DataFrame join step.
+    # The 4 one-hot position columns are appended last so all earlier columns
+    # keep their ordering. They are NOT populated by assemble_match_records --
+    # that stays a pure per-match afltables+footywire function -- but by
+    # add_position_features as a whole-DataFrame join step.
     *POSITION_COLUMNS,
 ]
 
-_FOOTYWIRE_ONLY_COLUMNS = ("score_involvements", "intercepts")
+_FOOTYWIRE_ONLY_COLUMNS = (
+    "score_involvements", "intercepts",
+    "uncontested_possessions", "effective_disposals", "disposal_efficiency",
+    "marks_inside_50", "one_percenters", "centre_clearances", "metres_gained",
+    "tackles_inside_50",
+)
 # Columns assemble_match_records populates per row: everything except the
 # position one-hots, which are joined on afterward via add_position_features.
 _ASSEMBLED_STAT_COLUMNS = [c for c in STAT_COLUMNS if c not in POSITION_COLUMNS]

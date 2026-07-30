@@ -28,7 +28,7 @@ and the pre/post-2026 voting-rule caveat.
 | Data | Source | Notes |
 |------|--------|-------|
 | Brownlow votes + 12 stats | afltables.com match pages | `afl/stats/games/{year}/{id}.html`, enumerated via `afl/brownlow/brownlow{year}rbr.html` |
-| Score involvements + intercepts | footywire.com advanced stats | `ft_match_statistics?mid=...&advv=Y`, match IDs enumerated via `ft_match_list?year=...`. Verified against real pages: these 2 columns don't exist on footywire's advanced-stats page before **2015** (2012-2014 pages have 11 columns, no SI/ITC; 2015+ have 18). `parse_advanced_stats_page` defaults both to 0 when absent rather than crashing. |
+| Score involvements + intercepts + 8 more advanced stats | footywire.com advanced stats | `ft_match_statistics?mid=...&advv=Y`, match IDs enumerated via `ft_match_list?year=...`. `parse_advanced_stats_page` extracts 10 columns total from this one already-fetched page: `score_involvements` (SI), `intercepts` (ITC), plus `uncontested_possessions` (UP), `effective_disposals` (ED), `disposal_efficiency` (DE%), `marks_inside_50` (MI5), `one_percenters` (1%), `centre_clearances` (CCL), `metres_gained` (MG), `tackles_inside_50` (T5). Verified against real pages: these columns don't exist on footywire's advanced-stats page before **2015** (2012-2014 pages have 11 columns; 2015+ have 18). `parse_advanced_stats_page` defaults every one of them to 0 when absent rather than crashing. |
 | Player position (4 one-hot features) | footywire.com team-roster pages | `tp-{slug}?year={year}`, one page per club per season. Slugs in `brownlow/teams.py`'s `FOOTYWIRE_TEAM_SLUGS` (all 18 clubs, keyed by canonical afltables spelling; note North Melbourne's slug is `kangaroos`). `parse_team_roster` (in `brownlow/footywire.py`) reads the last `<td class="data">` cell of each roster row as the raw position. Supports historical years back to at least 2012. Parsed with **lxml** (not html.parser) because the roster table has a stray extra `</tr>` per row that html.parser mis-nests. `build_position_lookup` (in `brownlow/dataset.py`) fetches these once per run and `add_position_features` joins them onto the assembled DataFrame by `(season, team, player)`. |
 
 See `docs/superpowers/specs/2026-07-27-brownlow-predictor-design.md` for
@@ -145,6 +145,27 @@ full data source research and rationale.
   regardless of the join fix (these stats don't exist on footywire before
   2015 at all — see Data Sources), so roughly a fifth of the training
   window has only 13 of the 15 stat features populated.
+
+- **New 20th–27th features: 8 more footywire advanced stats.**
+  `parse_advanced_stats_page` (`brownlow/footywire.py`) already fetched
+  footywire's advanced-stats page (`ft_match_statistics?...&advv=Y`) per match
+  but only extracted 2 of its ~17 columns (`score_involvements`,
+  `intercepts`). It now extracts 8 more from the **same already-fetched page**
+  (zero new network requests): `uncontested_possessions` (UP),
+  `effective_disposals` (ED), `disposal_efficiency` (DE%), `marks_inside_50`
+  (MI5), `one_percenters` (1%), `centre_clearances` (CCL), `metres_gained`
+  (MG), and `tackles_inside_50` (T5). All 8 use the identical index-lookup +
+  `is not None` guard + `.replace(".","").isdigit()` numeric check + default-0
+  pattern SI/ITC use, so they degrade gracefully on footywire's pre-2015 pages
+  (which lack these columns) and default to 0 when no footywire row joins onto
+  an afltables player. **`disposal_efficiency` is a percentage float** (e.g.
+  `73.1`, range ~0-100) parsed with `float()`; the other 7 are integer counts.
+  All 8 are added to `_FOOTYWIRE_ONLY_COLUMNS` alongside SI/ITC so they get the
+  same "default 0 on a footywire miss" treatment in `assemble_match_records`.
+  `STAT_COLUMNS` (`brownlow/dataset.py`) is now **27** entries (was 19); they
+  sit after `intercepts` and before `team_margin`. `brownlow/model.py` reads
+  `STAT_COLUMNS` generically, so it picks the 8 up with no change (the shipped
+  `model.txt` must be retrained before it can score against the 27-column set).
 
 - **Position features (16th-19th) add measured signal but very little of
   it.** Retraining on the full 19-feature, 123,166-row dataset (98% of rows —
