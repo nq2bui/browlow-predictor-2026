@@ -11,7 +11,7 @@ from brownlow.afltables import (
     parse_match_header,
 )
 from brownlow.footywire import SEASON_MATCH_LIST_URL_TEMPLATE, MATCH_STATS_URL_TEMPLATE, list_season_match_ids
-from brownlow.dataset import assemble_match_records
+from brownlow.dataset import assemble_match_records, add_position_features, build_position_lookup
 from brownlow.model import load_model
 from brownlow.weekly import accumulate_season_votes, per_round_votes
 from brownlow.dashboard import render_leaderboard, render_round_matrix
@@ -111,6 +111,23 @@ def main():
     if season_df.empty:
         logger.error("no 2026 match data available yet, leaving existing index.html untouched")
         return
+
+    # Join current-season player positions (18 roster fetches -- only this
+    # season's rosters are needed, not the full history). Built once here and
+    # joined onto season_df before scoring. If the build fails entirely (e.g.
+    # footywire down), degrade to all-zero position columns for every row so the
+    # weekly update still runs -- the model functioned without this feature
+    # before it existed.
+    try:
+        position_lookup = build_position_lookup(CURRENT_SEASON, CURRENT_SEASON)
+    except Exception as e:
+        logger.warning(
+            "could not build position lookup, scoring with all-zero position "
+            "features for every row: %s",
+            e,
+        )
+        position_lookup = {}
+    season_df = add_position_features(season_df, position_lookup)
 
     model = load_model(MODEL_PATH)
     leaderboard = accumulate_season_votes(model, season_df)

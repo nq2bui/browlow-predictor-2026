@@ -2,7 +2,12 @@ from pathlib import Path
 
 from backfill_data import backfill_seasons
 from brownlow.afltables import SEASON_INDEX_URL_TEMPLATE
-from brownlow.footywire import SEASON_MATCH_LIST_URL_TEMPLATE, MATCH_STATS_URL_TEMPLATE
+from brownlow.dataset import POSITION_COLUMNS
+from brownlow.footywire import (
+    SEASON_MATCH_LIST_URL_TEMPLATE,
+    MATCH_STATS_URL_TEMPLATE,
+    TEAM_ROSTER_URL_TEMPLATE,
+)
 
 AFLTABLES_MATCH = Path("tests/fixtures/afltables_match_sample.html").read_text()
 AFLTABLES_INDEX = Path("tests/fixtures/afltables_season_index_sample.html").read_text()
@@ -22,6 +27,40 @@ def fake_fetch(url: str) -> str:
     if url == MATCH_STATS_URL_TEMPLATE.format(mid=10751):
         return FOOTYWIRE_ADV
     raise AssertionError(f"unexpected URL fetched in test: {url}")
+
+
+TEAM_ROSTER = Path("tests/fixtures/footywire_team_roster_sample.html").read_text()
+# Relabel the roster fixture's first player (Arnot, Matthew -> Midfield) to
+# "Bolton, Shai", which normalizes to "S. Bolton" -- a real Richmond player in
+# the afltables match fixture -- so the (2023, Richmond, S. Bolton) join lands.
+RICHMOND_ROSTER_2023 = TEAM_ROSTER.replace("Arnot, Matthew", "Bolton, Shai")
+
+
+def fake_fetch_with_roster(url: str) -> str:
+    if url == TEAM_ROSTER_URL_TEMPLATE.format(slug="richmond-tigers", year=2023):
+        return RICHMOND_ROSTER_2023
+    # Every other team's roster fetch "fails" -> those players fall back to
+    # all-zero position columns (graceful per-team skip in build_position_lookup).
+    if "tp-" in url:
+        raise AssertionError(f"no roster wired for {url}")
+    return fake_fetch(url)
+
+
+def test_backfill_joins_position_one_hot_onto_dataframe():
+    df = backfill_seasons(2023, 2023, fetch=fake_fetch_with_roster)
+
+    # All 4 one-hot position columns are present on the output DataFrame.
+    for col in POSITION_COLUMNS:
+        assert col in df.columns
+
+    # S. Bolton's Richmond roster row (relabelled to position "Midfield") joins:
+    bolton = df[(df["team"] == "Richmond") & (df["player"] == "S. Bolton")].iloc[0]
+    assert bolton["position_midfield"] == 1
+    assert bolton[["position_forward", "position_defender", "position_ruck"]].sum() == 0
+
+    # A Richmond player NOT in the roster fixture stays all-zero (unknown).
+    baker = df[(df["team"] == "Richmond") & (df["player"] == "L. Baker")].iloc[0]
+    assert baker[POSITION_COLUMNS].sum() == 0
 
 
 def test_backfill_seasons_builds_combined_dataframe():

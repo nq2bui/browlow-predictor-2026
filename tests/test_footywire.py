@@ -1,8 +1,19 @@
 from pathlib import Path
 
-from brownlow.footywire import parse_advanced_stats_page, list_season_match_ids
+from brownlow.footywire import parse_advanced_stats_page, list_season_match_ids, parse_team_roster
 
 ADV_FIXTURE = Path("tests/fixtures/footywire_advanced_sample.html").read_text()
+# Real team-roster page rows sliced verbatim from a live captured 2015 Richmond
+# page (.superpowers/sdd/debug_footywire_roster_2015.html, tp-richmond-tigers?
+# year=2015). Position is the LAST <td class="data"> cell of each darkcolor/
+# lightcolor row. The fixture deliberately spans 5 distinct real position values
+# -- Midfield, Defender, Forward, the combo "MidfieldForward", and Ruck -- and
+# the first row (Arnot, Matthew) carries the extra <span class="playerflag"
+# title="Rookie">R</span> after the name link, to prove that span does not break
+# name or position parsing. footywire's roster table also has a stray extra
+# </tr> after every row that html.parser mis-nests (dropping all but the first
+# row), so parse_team_roster uses lxml, which recovers the intended structure.
+TEAM_ROSTER_FIXTURE = Path("tests/fixtures/footywire_team_roster_sample.html").read_text()
 # Real footywire pattern: a substituted player's name carries a trailing arrow
 # marker directly appended with no separator -- U+2197 (↗, subbed ON) or U+2199
 # (↙, subbed OFF). We reproduce it by suffixing the arrow onto a real player row
@@ -147,6 +158,38 @@ def test_parse_advanced_stats_page_strips_substitution_arrow_markers():
     players_off = {r["player"] for r in rows_off}
     assert "J Ross" in players_off  # ↙ stripped too
     assert "J Ross↙" not in players_off
+
+
+def test_parse_team_roster():
+    roster = parse_team_roster(TEAM_ROSTER_FIXTURE)
+
+    # 5 real player rows sliced into the fixture; every row yields an entry.
+    assert len(roster) == 5
+
+    by_player = {r["player"]: r["position"] for r in roster}
+
+    # Name is normalized to the canonical "F. Surname" join key via
+    # normalize_player_name, from footywire's "Surname, First" format.
+    assert by_player["D. Astbury"] == "Defender"
+    assert by_player["D. Butler"] == "Forward"
+    assert by_player["S. Hampson"] == "Ruck"
+    # Combo positions occur in real data and are returned verbatim (raw string);
+    # bucketing into one-hot columns happens later in the dataset layer.
+    assert by_player["T. Cotchin"] == "MidfieldForward"
+
+    # The row with the extra <span class="playerflag" title="Rookie">R</span>
+    # after the name link still parses cleanly: name is not polluted by the "R"
+    # flag, and the last data cell ("Midfield") is still read as the position.
+    assert by_player["M. Arnot"] == "Midfield"
+
+    # Position text is whitespace-stripped (the real cell is newline-padded).
+    assert all(p == p.strip() for p in by_player.values())
+
+
+def test_parse_team_roster_missing_div_returns_empty():
+    # Graceful degradation: a page without the team-players-div (e.g. an error
+    # page or an unexpected layout) yields an empty roster, not a crash.
+    assert parse_team_roster("<html><body>no roster here</body></html>") == []
 
 
 def test_list_season_match_ids():

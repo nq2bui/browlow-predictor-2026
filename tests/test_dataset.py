@@ -1,9 +1,21 @@
 import logging
 from pathlib import Path
 
-from brownlow.dataset import assemble_match_records, rows_to_dataframe, STAT_COLUMNS
+import pandas as pd
+
+from brownlow.dataset import (
+    assemble_match_records,
+    rows_to_dataframe,
+    STAT_COLUMNS,
+    POSITION_COLUMNS,
+    normalize_position,
+    build_position_lookup,
+    add_position_features,
+)
+from brownlow.footywire import TEAM_ROSTER_URL_TEMPLATE
 
 AFLTABLES_FIXTURE = Path("tests/fixtures/afltables_match_sample.html").read_text()
+TEAM_ROSTER_FIXTURE = Path("tests/fixtures/footywire_team_roster_sample.html").read_text()
 FOOTYWIRE_FIXTURE = Path("tests/fixtures/footywire_advanced_sample.html").read_text()
 # Real captured Adelaide (home, 101) v Hawthorn (away, 87) R22 2025 match page,
 # used to verify team_margin on a non-draw where home_score != away_score.
@@ -12,15 +24,109 @@ ADELAIDE_HAWTHORN_FIXTURE = Path(
 ).read_text()
 
 
-def test_stat_columns_has_15_entries():
-    assert len(STAT_COLUMNS) == 15
+def test_stat_columns_has_19_entries():
+    assert len(STAT_COLUMNS) == 19
     assert STAT_COLUMNS[:8] == [
         "kicks", "handballs", "disposals", "marks",
         "goals", "behinds", "hitouts", "tackles",
     ]
-    # score_involvements/intercepts precede the new team_margin column, which is
-    # appended last so the existing 14 columns keep their ordering.
-    assert STAT_COLUMNS[-3:] == ["score_involvements", "intercepts", "team_margin"]
+    # The 4 one-hot position columns are appended last so the existing 15
+    # columns keep their ordering (score_involvements, intercepts, team_margin
+    # precede them).
+    assert POSITION_COLUMNS == [
+        "position_forward", "position_midfield", "position_defender", "position_ruck",
+    ]
+    assert STAT_COLUMNS[-4:] == POSITION_COLUMNS
+    assert STAT_COLUMNS[-7:-4] == ["score_involvements", "intercepts", "team_margin"]
+
+
+def test_normalize_position_buckets_raw_strings():
+    # The 4 primary categories map straight through, case-insensitively.
+    assert normalize_position("Forward") == "forward"
+    assert normalize_position("midfield") == "midfield"
+    assert normalize_position("  DEFENDER  ") == "defender"
+    assert normalize_position("Ruck") == "ruck"
+    # Common abbreviations normalize too.
+    assert normalize_position("FWD") == "forward"
+    # Combo positions resolve to the PRIMARY (first-listed) role: footywire lists
+    # the primary role first, so "MidfieldForward" -> midfield, "ForwardRuck" ->
+    # forward. This keeps the encoding strictly one-hot.
+    assert normalize_position("MidfieldForward") == "midfield"
+    assert normalize_position("ForwardRuck") == "forward"
+    # Genuinely unrecognized / empty / missing -> None (all-zero one-hot).
+    assert normalize_position("Substitute") is None
+    assert normalize_position("") is None
+    assert normalize_position(None) is None
+
+
+def test_add_position_features_one_hot_encoding():
+    df = pd.DataFrame([
+        {"season": 2015, "team": "Richmond", "player": "T. Cotchin"},   # MidfieldForward
+        {"season": 2015, "team": "Richmond", "player": "D. Astbury"},   # Defender
+        {"season": 2015, "team": "Richmond", "player": "S. Hampson"},   # Ruck
+        {"season": 2015, "team": "Richmond", "player": "N. Obody"},     # not in lookup
+    ])
+    lookup = {
+        (2015, "Richmond", "T. Cotchin"): "MidfieldForward",
+        (2015, "Richmond", "D. Astbury"): "Defender",
+        (2015, "Richmond", "S. Hampson"): "Ruck",
+    }
+
+    out = add_position_features(df, lookup)
+
+    # All 4 one-hot columns exist regardless of match outcome.
+    for col in POSITION_COLUMNS:
+        assert col in out.columns
+
+    cotchin = out[out["player"] == "T. Cotchin"].iloc[0]
+    assert cotchin["position_midfield"] == 1  # combo -> primary role = midfield
+    assert cotchin["position_forward"] == 0
+    assert cotchin["position_defender"] == 0
+    assert cotchin["position_ruck"] == 0
+
+    astbury = out[out["player"] == "D. Astbury"].iloc[0]
+    assert astbury["position_defender"] == 1
+    assert astbury[["position_forward", "position_midfield", "position_ruck"]].sum() == 0
+
+    hampson = out[out["player"] == "S. Hampson"].iloc[0]
+    assert hampson["position_ruck"] == 1
+
+    # A player absent from the lookup gets all-zero one-hots (the "unknown"
+    # encoding) rather than an error.
+    obody = out[out["player"] == "N. Obody"].iloc[0]
+    assert obody[POSITION_COLUMNS].sum() == 0
+
+
+def test_add_position_features_empty_dataframe():
+    # An empty season DataFrame (no matches yet) still gains the 4 columns so
+    # downstream model.predict(df[STAT_COLUMNS]) never KeyErrors.
+    df = pd.DataFrame(columns=["season", "team", "player"])
+    out = add_position_features(df, {})
+    for col in POSITION_COLUMNS:
+        assert col in out.columns
+    assert len(out) == 0
+
+
+def _roster_fake_fetch(url: str) -> str:
+    # Only Richmond 2015 has a wired response; every other (season, team) URL
+    # "fails", exercising the graceful per-team skip in build_position_lookup.
+    if url == TEAM_ROSTER_URL_TEMPLATE.format(slug="richmond-tigers", year=2015):
+        return TEAM_ROSTER_FIXTURE
+    raise AssertionError(f"no roster wired for {url}")
+
+
+def test_build_position_lookup_uses_real_slug_and_skips_failures():
+    lookup = build_position_lookup(2015, 2015, fetch=_roster_fake_fetch)
+
+    # Richmond 2015 players are keyed by (season, canonical team name, norm name).
+    assert lookup[(2015, "Richmond", "T. Cotchin")] == "MidfieldForward"
+    assert lookup[(2015, "Richmond", "D. Astbury")] == "Defender"
+    assert lookup[(2015, "Richmond", "S. Hampson")] == "Ruck"
+
+    # Every key carries the Richmond team name; the other 17 teams' fetches
+    # "failed" and were skipped gracefully rather than crashing the whole build.
+    assert {team for (_, team, _) in lookup} == {"Richmond"}
+    assert len(lookup) == 5
 
 
 def test_assemble_match_records_computes_team_margin_for_drawn_fixture():
@@ -135,8 +241,15 @@ def test_assemble_match_records_joins_across_team_name_alias():
 def test_rows_to_dataframe_has_expected_columns():
     records = assemble_match_records(2023, "031420230316", AFLTABLES_FIXTURE, None)
     df = rows_to_dataframe(records)
-    for col in STAT_COLUMNS + ["season", "round", "date", "match_id", "team", "player", "brownlow_votes"]:
+    # assemble_match_records populates every STAT_COLUMN EXCEPT the 4 one-hot
+    # position columns, which are added later as a whole-DataFrame join step
+    # (add_position_features) so assemble stays a pure per-match afltables+
+    # footywire function that needs no season/team-level roster lookup.
+    non_position_stats = [c for c in STAT_COLUMNS if c not in POSITION_COLUMNS]
+    for col in non_position_stats + ["season", "round", "date", "match_id", "team", "player", "brownlow_votes"]:
         assert col in df.columns
+    for col in POSITION_COLUMNS:
+        assert col not in df.columns  # only add_position_features adds these
     assert len(df) == 6
 
 

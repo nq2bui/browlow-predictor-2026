@@ -2,8 +2,58 @@ import re
 
 from bs4 import BeautifulSoup
 
+from brownlow.names import normalize_player_name
+
 MATCH_STATS_URL_TEMPLATE = "https://www.footywire.com/afl/footy/ft_match_statistics?mid={mid}&advv=Y"
 SEASON_MATCH_LIST_URL_TEMPLATE = "https://www.footywire.com/afl/footy/ft_match_list?year={year}"
+# footywire's per-team, per-season player-list ("team players") page. Confirmed
+# to support historical years back to at least 2012 and up to the current
+# roster. Slugs live in brownlow.teams.FOOTYWIRE_TEAM_SLUGS.
+TEAM_ROSTER_URL_TEMPLATE = "https://www.footywire.com/afl/footy/tp-{slug}?year={year}"
+
+
+def parse_team_roster(html: str) -> list[dict]:
+    """Parse a footywire team-roster page into ``[{"player", "position"}, ...]``.
+
+    Returns one dict per player row, with ``player`` normalized to the canonical
+    "F. Surname" join key (footywire lists names as "Surname, First", the same
+    convention afltables uses, so ``normalize_player_name`` handles it directly)
+    and ``position`` the raw, whitespace-stripped position string from the LAST
+    ``<td class="data">`` cell of the row (e.g. "Forward", "Defender",
+    "Midfield", "Ruck", or a combo like "MidfieldForward").
+
+    Parsed with lxml specifically: footywire's roster table emits a stray extra
+    ``</tr>`` after every row, which Python's built-in html.parser mis-nests --
+    it closes the table after the first row and drops every subsequent player.
+    lxml recovers the intended structure and returns all rows. A page missing
+    the ``team-players-div`` container (an error page, an unexpected layout)
+    yields an empty list rather than raising, matching the pipeline's
+    graceful-degradation convention.
+    """
+    soup = BeautifulSoup(html, "lxml")
+    div = soup.find("div", id="team-players-div")
+    if div is None:
+        return []
+
+    players = []
+    for tr in div.find_all("tr", class_=["darkcolor", "lightcolor"]):
+        name_link = tr.find("a")
+        data_cells = tr.find_all("td", class_="data")
+        # A genuine player row has a name link and several data cells (the last
+        # being Position). Skip anything that doesn't (defensive against stray
+        # or malformed rows), rather than indexing into an empty list.
+        if name_link is None or not data_cells:
+            continue
+        # The name cell may carry an extra <span class="playerflag" title=
+        # "Rookie">R</span> after the link; taking the <a>'s own text (not the
+        # whole cell) keeps the "R" flag out of the parsed name.
+        raw_name = name_link.get_text(strip=True)
+        position = data_cells[-1].get_text(strip=True)
+        players.append({
+            "player": normalize_player_name(raw_name),
+            "position": position,
+        })
+    return players
 
 
 def parse_advanced_stats_page(html: str) -> list[dict]:

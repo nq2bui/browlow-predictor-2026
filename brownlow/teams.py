@@ -33,6 +33,32 @@ TEAM_INFO = {
 
 _FALLBACK = {"code": "", "color": "#666666"}
 
+# footywire's URL slug for each club's team-roster page
+# (tp-{slug}?year=...). Keys are the canonical afltables spellings (identical to
+# TEAM_INFO's keys), so a lookup built from these joins cleanly onto the
+# afltables-side player rows. Verified from real footywire match-list hrefs;
+# note North Melbourne's slug is "kangaroos" (its historical footywire name).
+FOOTYWIRE_TEAM_SLUGS = {
+    "Adelaide": "adelaide-crows",
+    "Brisbane Lions": "brisbane-lions",
+    "Carlton": "carlton-blues",
+    "Collingwood": "collingwood-magpies",
+    "Essendon": "essendon-bombers",
+    "Fremantle": "fremantle-dockers",
+    "Geelong": "geelong-cats",
+    "Gold Coast": "gold-coast-suns",
+    "Greater Western Sydney": "greater-western-sydney-giants",
+    "Hawthorn": "hawthorn-hawks",
+    "North Melbourne": "kangaroos",
+    "Melbourne": "melbourne-demons",
+    "Port Adelaide": "port-adelaide-power",
+    "Richmond": "richmond-tigers",
+    "St Kilda": "st-kilda-saints",
+    "Sydney": "sydney-swans",
+    "West Coast": "west-coast-eagles",
+    "Western Bulldogs": "western-bulldogs",
+}
+
 # footywire spells two clubs differently from afltables. Verified by diffing the
 # full real team-name sets from both sites across the whole 2025 season: these
 # are the ONLY two aliases -- the other 16 clubs are spelled identically by both.

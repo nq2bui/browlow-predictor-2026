@@ -16,7 +16,7 @@ from brownlow.footywire import (
     MATCH_STATS_URL_TEMPLATE,
     list_season_match_ids,
 )
-from brownlow.dataset import assemble_match_records
+from brownlow.dataset import assemble_match_records, add_position_features, build_position_lookup
 from brownlow.http import fetch_url
 from brownlow.teams import canonicalize_team_name
 
@@ -110,7 +110,25 @@ def backfill_seasons(start_season: int, end_season: int, fetch=fetch_url) -> pd.
                 continue
 
             all_records.extend(match_records)
-    return pd.DataFrame(all_records)
+
+    df = pd.DataFrame(all_records)
+
+    # Join per-season player positions (footywire team-roster pages) onto the
+    # assembled DataFrame as 4 one-hot columns. Built ONCE for the whole season
+    # range (18 clubs x N seasons), not per match. If the whole build fails
+    # (e.g. footywire down), degrade gracefully to all-zero position columns for
+    # every row -- the model functioned without this feature before it existed.
+    try:
+        position_lookup = build_position_lookup(start_season, end_season, fetch=fetch)
+    except Exception as e:
+        logger.warning(
+            "could not build position lookup, proceeding with all-zero position "
+            "features for every row: %s",
+            e,
+        )
+        position_lookup = {}
+    df = add_position_features(df, position_lookup)
+    return df
 
 
 def main():

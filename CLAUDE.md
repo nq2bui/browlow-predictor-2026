@@ -29,6 +29,7 @@ and the pre/post-2026 voting-rule caveat.
 |------|--------|-------|
 | Brownlow votes + 12 stats | afltables.com match pages | `afl/stats/games/{year}/{id}.html`, enumerated via `afl/brownlow/brownlow{year}rbr.html` |
 | Score involvements + intercepts | footywire.com advanced stats | `ft_match_statistics?mid=...&advv=Y`, match IDs enumerated via `ft_match_list?year=...`. Verified against real pages: these 2 columns don't exist on footywire's advanced-stats page before **2015** (2012-2014 pages have 11 columns, no SI/ITC; 2015+ have 18). `parse_advanced_stats_page` defaults both to 0 when absent rather than crashing. |
+| Player position (4 one-hot features) | footywire.com team-roster pages | `tp-{slug}?year={year}`, one page per club per season. Slugs in `brownlow/teams.py`'s `FOOTYWIRE_TEAM_SLUGS` (all 18 clubs, keyed by canonical afltables spelling; note North Melbourne's slug is `kangaroos`). `parse_team_roster` (in `brownlow/footywire.py`) reads the last `<td class="data">` cell of each roster row as the raw position. Supports historical years back to at least 2012. Parsed with **lxml** (not html.parser) because the roster table has a stray extra `</tr>` per row that html.parser mis-nests. `build_position_lookup` (in `brownlow/dataset.py`) fetches these once per run and `add_position_features` joins them onto the assembled DataFrame by `(season, team, player)`. |
 
 See `docs/superpowers/specs/2026-07-27-brownlow-predictor-design.md` for
 full data source research and rationale.
@@ -90,6 +91,41 @@ full data source research and rationale.
   afltables directly and is available for every match regardless of the
   footywire join outcome. `STAT_COLUMNS` (`brownlow/dataset.py`) is now 15
   entries, not 14.
+
+- **New 16th–19th features: player position (4 one-hot columns).**
+  `position_forward`, `position_midfield`, `position_defender`,
+  `position_ruck` capture Brownlow voting's well-documented positional bias
+  (mids/forwards dominate the medal; defenders/rucks are historically
+  underrepresented). Sourced from footywire team-roster pages (see Data
+  Sources). A player maps to **exactly one** bucket, or to all-zero when the
+  position is missing/unrecognized — a deliberate "unknown" encoding for the
+  tree model rather than a 5th column. Combo positions in the real data
+  (`MidfieldForward`, `ForwardRuck`, verified live against Richmond 2015)
+  resolve to the **primary (first-listed) role** so the encoding stays
+  strictly one-hot; `normalize_position` matches case-insensitively and
+  handles common abbreviations (`FWD` etc.). The 4 columns are NOT emitted by
+  `assemble_match_records` (which stays a pure per-match afltables+footywire
+  function); they are joined onto the whole assembled DataFrame afterward by
+  `add_position_features`, using a `(season, team, player)` lookup built once
+  per run via `build_position_lookup`. Both `backfill_data.py` (full season
+  range) and `weekly_update.py` (current season only, 18 fetches) wire this
+  in, and degrade gracefully to all-zero position columns for every row if the
+  lookup build fails entirely (footywire down). `STAT_COLUMNS` is now **19**
+  entries, not 15; `brownlow/model.py` reads `STAT_COLUMNS` generically, so it
+  picks the 4 up with no change (the shipped `model.txt` must be retrained
+  before it can score against the new 19-column feature set).
+
+- **Position is now per-season historical, not just "current".** Positions
+  are fetched from each club's roster page **for the specific season**
+  (`tp-{slug}?year={year}`), so a 2015 training row gets that player's 2015
+  role, a 2020 row gets their 2020 role, and so on — not a single present-day
+  snapshot. This largely resolves the originally-anticipated
+  "current-position-may-not-reflect-historical-role" concern for players who
+  changed positions across their career (e.g. a forward who became a
+  defender): each season's rows use that season's real roster. A residual
+  caveat remains only *within* a season — footywire lists one nominal
+  position per player for the whole year, so a mid-season role change isn't
+  captured, and combo/hybrid players are collapsed to their primary role.
 
 - **Backtest hit rates on the improved 15-feature, better-joined 2012-2025
   data: 50% (2024 holdout), 25% (2025 holdout)** — both very slightly LOWER
