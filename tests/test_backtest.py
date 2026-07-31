@@ -1,7 +1,8 @@
 import pandas as pd
 from brownlow.dataset import STAT_COLUMNS
 from brownlow.model import train_ranker
-from brownlow.backtest import top20_hit_rate
+from brownlow.backtest import top20_hit_rate, top20_hit_rate_with_scheme
+from brownlow.weekly import assign_discrete_match_votes, assign_espn_style_votes
 
 
 def _row(player: str, match_id: str, votes: int, skill: int) -> dict:
@@ -66,6 +67,68 @@ def _season_df_grinders_vs_spikes() -> pd.DataFrame:
         rows.append(_row(f"spikefill{i}b", match_id, votes=0, skill=5))
 
     return pd.DataFrame(rows)
+
+
+class _FakeModel:
+    """Model stub whose predict() returns a caller-supplied score per row, keyed
+    off the `kicks` column so a test controls per-match ranking deterministically
+    (mirrors the stub used in tests/test_weekly.py)."""
+
+    def __init__(self, scores_by_kicks):
+        self._scores_by_kicks = scores_by_kicks
+
+    def predict(self, features: pd.DataFrame):
+        return [self._scores_by_kicks[k] for k in features["kicks"]]
+
+
+def _scheme_row(player: str, match_id: str, kicks: int, votes: float) -> dict:
+    row = {col: 0 for col in STAT_COLUMNS}
+    row["kicks"] = kicks
+    row.update({"match_id": match_id, "player": player, "brownlow_votes": votes})
+    return row
+
+
+def _known_overlap_season():
+    """Season engineered so predicted and actual top-20 overlap is EXACTLY 0.95.
+
+    21 "hero" players P00..P20. Hero Pi wins (i+1) two-man matches (a unique
+    lone filler each, so Pi is the unambiguous rank-1). Under any per-match
+    scheme the winner outscores its filler, so hero predicted totals are strictly
+    ordered P00 < P01 < ... < P20 and every filler total sits below P00's -> the
+    predicted top-20 is exactly {P01..P20}, excluding P00.
+
+    Actual brownlow_votes are set independently: every hero except P01 gets a
+    distinct positive season total (fillers get 0), so the actual top-20 is
+    {P00, P02..P20}, excluding P01.
+
+    The two top-20 sets differ only in P00 vs P01, so the intersection is
+    {P02..P20} = 19 of 20 -> hit rate 19/20 = 0.95, for ANY scheme whose rank-1
+    award exceeds its rank-2 award (both 3-2-1 and the ESPN fractional scale do).
+    """
+    kicks_win, kicks_fill = 100, 1
+    scores = {kicks_win: 9.0, kicks_fill: 1.0}
+    rows = []
+    match_num = 0
+    for i in range(21):
+        player = f"P{i:02d}"
+        actual_total = 0 if i == 1 else 10 + i  # P01 uniquely lowest (0)
+        for w in range(i + 1):
+            mid = f"m{match_num}"
+            votes = actual_total if w == 0 else 0  # bank the season total once
+            rows.append(_scheme_row(player, mid, kicks_win, votes))
+            rows.append(_scheme_row(f"fill{match_num}", mid, kicks_fill, 0))
+            match_num += 1
+    return pd.DataFrame(rows), _FakeModel(scores)
+
+
+def test_top20_hit_rate_with_scheme_computes_known_overlap_for_both_schemes():
+    season_df, model = _known_overlap_season()
+
+    discrete = top20_hit_rate_with_scheme(model, season_df, assign_discrete_match_votes)
+    espn = top20_hit_rate_with_scheme(model, season_df, assign_espn_style_votes)
+
+    assert discrete == 0.95
+    assert espn == 0.95
 
 
 def test_top20_hit_rate_ranks_by_season_total_not_single_match():

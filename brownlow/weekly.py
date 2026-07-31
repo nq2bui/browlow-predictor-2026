@@ -29,6 +29,36 @@ def assign_discrete_match_votes(model, match_df: pd.DataFrame) -> pd.Series:
     return votes
 
 
+def assign_espn_style_votes(model, match_df: pd.DataFrame) -> pd.Series:
+    """Assign ESPN-style fractional votes for a SINGLE match (experimental V2).
+
+    Same input/output contract as ``assign_discrete_match_votes``, but instead of
+    the official Brownlow 3-2-1 to exactly three players, this mirrors ESPN's AFL
+    predictor: a finer-grained 6-tier fractional scale spreading credit across up
+    to six players per match, to reduce the "margin for error" of a hard 3-tier
+    cutoff. Within the match, rank players by predicted score and award
+    3.0 / 2.5 / 2.0 / 1.5 / 1.0 / 0.5 to ranks 1-6 and 0.0 to everyone else. The
+    result is a float Series aligned to ``match_df``'s index.
+
+    Tie-breaking is identical to ``assign_discrete_match_votes``: a stable
+    descending sort, so equal predicted scores rank in input row order,
+    guaranteeing a single reproducible allocation.
+
+    This is a PARALLEL, NON-PRODUCTION scoring scheme for head-to-head comparison
+    against the 3-2-1 scheme; it does NOT feed the live leaderboard.
+    """
+    scores = predict_match_votes(model, match_df)
+
+    # Stable sort keeps input order for equal scores -> deterministic ties,
+    # exactly as assign_discrete_match_votes does.
+    ranked_index = scores.sort_values(ascending=False, kind="stable").index
+
+    votes = pd.Series(0.0, index=match_df.index, dtype=float)
+    for points, idx in zip((3.0, 2.5, 2.0, 1.5, 1.0, 0.5), ranked_index[:6]):
+        votes.loc[idx] = points
+    return votes
+
+
 def accumulate_season_votes(model, season_df: pd.DataFrame) -> pd.DataFrame:
     df = season_df.copy()
 

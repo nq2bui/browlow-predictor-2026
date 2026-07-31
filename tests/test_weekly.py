@@ -4,6 +4,7 @@ from brownlow.model import train_ranker
 from brownlow.weekly import (
     accumulate_season_votes,
     assign_discrete_match_votes,
+    assign_espn_style_votes,
     per_round_votes,
     round_sort_key,
 )
@@ -87,6 +88,59 @@ def test_assign_discrete_match_votes_preserves_original_index():
     votes = assign_discrete_match_votes(_FakeModel(scores), match_df)
     assert list(votes.index) == [100, 101, 102, 103]
     assert votes.loc[103] == 3 and votes.loc[102] == 2 and votes.loc[101] == 1 and votes.loc[100] == 0
+
+
+def test_assign_espn_style_votes_awards_fractional_6_tier_scale():
+    # Eight players in one match; predicted scores set via the fake model so the
+    # ranking is unambiguous. ESPN scheme awards a 6-tier fractional scale to the
+    # top six (3.0/2.5/2.0/1.5/1.0/0.5) and 0.0 to everyone from rank 7 down.
+    match_df = pd.DataFrame([
+        _match_row("A", 10),
+        _match_row("B", 80),
+        _match_row("C", 70),
+        _match_row("D", 60),
+        _match_row("E", 50),
+        _match_row("F", 40),
+        _match_row("G", 30),
+        _match_row("H", 20),
+    ])
+    scores = {80: 9.0, 70: 8.0, 60: 7.0, 50: 6.0, 40: 5.0, 30: 4.0, 20: 3.0, 10: 1.0}
+    model = _FakeModel(scores)
+
+    votes = assign_espn_style_votes(model, match_df)
+
+    # Rows in input order A..H; ranking by score is B>C>D>E>F>G>H>A.
+    # B->3.0, C->2.5, D->2.0, E->1.5, F->1.0, G->0.5, H->0.0, A->0.0.
+    expected = pd.Series(
+        [0.0, 3.0, 2.5, 2.0, 1.5, 1.0, 0.5, 0.0], index=match_df.index
+    )
+    pd.testing.assert_series_equal(votes, expected, check_names=False)
+    assert (votes >= 0).all()
+
+
+def test_assign_espn_style_votes_ties_broken_by_input_order():
+    # E and F tie on score; the same deterministic stable sort as
+    # assign_discrete_match_votes keeps the earlier input row ranked higher.
+    match_df = pd.DataFrame([
+        _match_row("A", 10),
+        _match_row("B", 80),
+        _match_row("C", 70),
+        _match_row("D", 60),
+        _match_row("E", 50),
+        _match_row("F", 40),
+        _match_row("G", 30),
+    ])
+    scores = {80: 9.0, 70: 8.0, 60: 7.0, 50: 5.0, 40: 5.0, 30: 2.0, 10: 1.0}
+    model = _FakeModel(scores)
+
+    votes = assign_espn_style_votes(model, match_df)
+
+    # B(3.0) C(2.5) D(2.0); E and F tie at 5.0 -> E earlier gets 1.5, F gets 1.0;
+    # G(0.5); A last -> 0.0.
+    expected = pd.Series(
+        [0.0, 3.0, 2.5, 2.0, 1.5, 1.0, 0.5], index=match_df.index
+    )
+    pd.testing.assert_series_equal(votes, expected, check_names=False)
 
 
 def test_accumulate_season_votes_ranks_players_by_total_predicted_votes():
