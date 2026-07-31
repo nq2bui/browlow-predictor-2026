@@ -142,12 +142,19 @@ def main():
     leaderboard_espn = accumulate_season_votes(
         model, season_df, vote_assigner=assign_espn_style_votes
     )
-    # The round-by-round matrix (rounds.html) shows only the top 20 under the
-    # Standard scheme; compute per-round detail for exactly those players (same
-    # head(20) convention) to keep it cheap. render_leaderboard no longer needs
-    # this -- it derives its team-tally section from the FULL leaderboards below.
-    top_20_players = leaderboard.head(20)["player"].tolist()
-    round_votes = per_round_votes(model, season_df, top_20_players)
+    # The round-by-round matrix (rounds.html) has the same Standard/ESPN toggle as
+    # the leaderboard. Each scheme ranks the field independently, so each gets its
+    # OWN top-20 player list (the SET can differ between schemes) and its per-round
+    # detail is computed with the MATCHING vote_assigner so the round cells
+    # reconcile with that scheme's season totals. Same head(20) convention as the
+    # leaderboard keeps it cheap. render_leaderboard derives its team-tally section
+    # from the FULL leaderboards, so it does not need these.
+    top_20_standard_players = leaderboard.head(20)["player"].tolist()
+    top_20_espn_players = leaderboard_espn.head(20)["player"].tolist()
+    round_votes_standard = per_round_votes(model, season_df, top_20_standard_players)
+    round_votes_espn = per_round_votes(
+        model, season_df, top_20_espn_players, vote_assigner=assign_espn_style_votes
+    )
 
     # Sportsbet Brownlow odds are a nice-to-have display feature, not core to the
     # prediction. A fetch failure (SPA render timeout, page change, missing
@@ -171,10 +178,19 @@ def main():
         len(leaderboard),
     )
 
-    # Second page: the same round_votes rendered as an all-20 round-by-round
-    # matrix (reuses the round_votes DataFrame already computed above).
-    render_round_matrix(leaderboard, round_votes, MATRIX_OUTPUT_PATH, CURRENT_SEASON)
-    logger.info("wrote round-by-round matrix to %s", MATRIX_OUTPUT_PATH)
+    # Second page: the all-20 round-by-round matrix, with the same Standard/ESPN
+    # toggle as the leaderboard. Both schemes' precomputed leaderboards + per-round
+    # detail are passed; the page swaps between them client-side, Standard default.
+    render_round_matrix(
+        {"Standard": leaderboard, "ESPN": leaderboard_espn},
+        {"Standard": round_votes_standard, "ESPN": round_votes_espn},
+        MATRIX_OUTPUT_PATH,
+        CURRENT_SEASON,
+    )
+    logger.info(
+        "wrote round-by-round matrix to %s (Standard + ESPN schemes)",
+        MATRIX_OUTPUT_PATH,
+    )
 
 
 if __name__ == "__main__":

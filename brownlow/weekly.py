@@ -118,17 +118,30 @@ def round_sort_key(round_value) -> tuple:
     return (2, 0, s)
 
 
-def per_round_votes(model, season_df: pd.DataFrame, players: list) -> pd.DataFrame:
-    """Per-round discrete 3-2-1 votes for a specified set of players.
+def per_round_votes(
+    model,
+    season_df: pd.DataFrame,
+    players: list,
+    vote_assigner=assign_discrete_match_votes,
+) -> pd.DataFrame:
+    """Per-round votes for a specified set of players, under a pluggable scheme.
 
     Output is scoped to ``players`` (e.g. the top-20 leaderboard). Crucially, the
-    3-2-1 allocation is computed on the FULL match (every player's row), exactly
+    vote allocation is computed on the FULL match (every player's row), exactly
     as ``accumulate_season_votes`` does, and only then filtered down to the
     requested players. This guarantees the per-round breakdown RECONCILES with
     the season total on the leaderboard: a player's votes each round are the same
     votes that summed into their ``predicted_season_votes``. (Filtering rows out
     *before* scoring would re-rank a shrunken field and inflate votes, so a
     player ranked 4th in the real match — 0 votes — could wrongly score 3.)
+
+    ``vote_assigner`` is the same pluggable ``(model, match_df) -> pd.Series``
+    callable ``accumulate_season_votes`` takes: it defaults to the production
+    3-2-1 (``assign_discrete_match_votes``) scheme so existing callers are
+    unchanged, and passing ``vote_assigner=assign_espn_style_votes`` produces the
+    ESPN 6-tier fractional breakdown (which can therefore emit fractional votes
+    like 2.5/1.5/0.5). Use the SAME assigner here as was used to build the
+    leaderboard whose ``players`` you pass, so the two reconcile.
 
     Only matches that actually contain a requested player are scored, so this
     stays cheap without affecting correctness (votes are allocated per match).
@@ -149,7 +162,7 @@ def per_round_votes(model, season_df: pd.DataFrame, players: list) -> pd.DataFra
         return pd.DataFrame(columns=["player", "round", "votes"])
 
     per_match_votes = [
-        assign_discrete_match_votes(model, match_df)
+        vote_assigner(model, match_df)
         for _, match_df in df.groupby("match_id", sort=False)
     ]
     df["votes"] = pd.concat(per_match_votes)

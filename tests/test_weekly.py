@@ -256,6 +256,31 @@ def test_per_round_votes_returns_player_round_votes_scoped_to_players():
     assert list(mid["votes"]) == [2, 2, 2]
 
 
+def test_per_round_votes_accepts_espn_vote_assigner():
+    # Passing vote_assigner=assign_espn_style_votes produces the ESPN 6-tier
+    # fractional breakdown instead of 3-2-1. With 4 players per match, ranks 1-4
+    # get 3.0/2.5/2.0/1.5, so Fringe (4th every round) is NONZERO (1.5) under
+    # ESPN whereas the default 3-2-1 scheme gives it 0 -- proving the parameter
+    # genuinely changes the per-round breakdown, and that fractional halves flow
+    # through per_round_votes without being truncated to int.
+    season_df = _multi_round_season_df()
+    scores = {40: 9.0, 30: 6.0, 20: 3.0, 10: 1.0}
+    model = _FakeModel(scores)
+
+    espn = per_round_votes(
+        model, season_df, ["Star", "Fringe"], vote_assigner=assign_espn_style_votes
+    )
+    star = espn[espn["player"] == "Star"]
+    assert list(star["round"]) == ["1", "2", "10"]
+    assert list(star["votes"]) == [3.0, 3.0, 3.0]
+    fringe = espn[espn["player"] == "Fringe"]
+    assert list(fringe["votes"]) == [1.5, 1.5, 1.5]
+
+    # Default (3-2-1) still gives Fringe 0 every round -- the schemes differ.
+    standard = per_round_votes(model, season_df, ["Fringe"])
+    assert list(standard[standard["player"] == "Fringe"]["votes"]) == [0, 0, 0]
+
+
 def test_per_round_votes_orders_finals_after_numeric_rounds():
     rows = []
     for rnd in ["2", "GF", "1", "QF"]:

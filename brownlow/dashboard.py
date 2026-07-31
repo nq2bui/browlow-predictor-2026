@@ -860,6 +860,15 @@ _MATRIX_TEMPLATE = """<!doctype html>
   td.cell.v1 {{ color: var(--white); font-weight: 600; }}
   td.cell.v0 {{ color: var(--muted); }}
   td.cell.dnp {{ color: rgba(122, 154, 122, 0.4); }}
+  /* ESPN-only intermediate tiers (2.5 / 1.5 / 0.5). The Standard 3-2-1 scheme
+     never emits these, so the four rules above are untouched and Standard looks
+     identical. Only the exact 3.0 keeps the strongest gold (v3); 2.5 (v2h) gets
+     a lighter-gold treatment, 1.5 (v1h) sits with the white minor-vote tier, and
+     0.5 (v0h) gets the lightest/muted tier — dimmer than a played-but-scoreless
+     0 but brighter than a did-not-play em-dash. */
+  td.cell.v2h {{ color: var(--gold-bright); font-weight: 800; background: rgba(240, 165, 0, 0.06); }}
+  td.cell.v1h {{ color: var(--white); font-weight: 700; }}
+  td.cell.v0h {{ color: rgba(122, 154, 122, 0.75); }}
   td.total {{
     font-weight: 800;
     color: var(--gold);
@@ -883,23 +892,57 @@ _MATRIX_TEMPLATE = """<!doctype html>
   .legend .swatch {{ font-weight: 800; }}
   .legend .swatch.v3 {{ color: var(--gold-bright); }}
   .legend .swatch.dnp {{ color: rgba(122, 154, 122, 0.55); }}
+  /* Scoring-scheme toggle: same segmented control ("Standard" | "ESPN") used on
+     the main leaderboard, in the same dark/gold palette. Standard (production
+     3-2-1) is the default; ESPN (experimental 6-tier fractional) is opt-in.
+     Vanilla-JS driven — swaps the precomputed per-scheme header + row data
+     embedded below; nothing is recomputed client-side. */
+  .scheme-toggle {{
+    display: inline-flex;
+    margin: 0 0 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--panel);
+  }}
+  .scheme-btn {{
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    padding: 9px 22px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: inherit;
+    cursor: pointer;
+  }}
+  .scheme-btn + .scheme-btn {{ border-left: 1px solid var(--line); }}
+  .scheme-btn:hover {{ color: var(--white); }}
+  .scheme-btn.active {{ background: var(--gold); color: var(--grass); }}
+  .scheme-caption {{ color: var(--muted); font-size: 12px; margin: 0 0 16px; }}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Round-by-round <span class="accent">matrix</span></h1>
-  <p class="subtitle">Every top-20 player's discrete votes, round by round.</p>
+  <p class="subtitle">Every top-20 player's votes, round by round.</p>
   <p class="nav-link"><a href="index.html">&larr; Back to leaderboard</a></p>
   <div id="stale-banner" class="stale-banner" role="alert" style="display: none;" data-generated-at="{generated_at_iso}">&#9888;&#65039; This page hasn't updated in over 10 days &mdash; the data may be stale</div>
+  <div class="scheme-toggle" role="group" aria-label="Vote scoring scheme">
+    <button type="button" class="scheme-btn active" data-scheme="Standard">Standard</button>
+    <button type="button" class="scheme-btn" data-scheme="ESPN">ESPN</button>
+  </div>
+  <p class="scheme-caption">Standard = official 3-2-1 votes. ESPN = experimental 6-tier fractional votes (comparison only).</p>
   <div class="card">
     <div class="matrix-scroll">
       <table>
         <thead>
-          <tr>
+          <tr id="matrix-head-row">
 {header}
           </tr>
         </thead>
-        <tbody>
+        <tbody id="matrix-body">
 {rows}
         </tbody>
       </table>
@@ -914,6 +957,39 @@ _MATRIX_TEMPLATE = """<!doctype html>
   <footer>Last updated {timestamp}</footer>
 </div>
 <script>
+// ===== Precomputed per-scheme matrix data, embedded server-side =====
+// Two scoring schemes are shown via the toggle: "Standard" (production 3-2-1)
+// and "ESPN" (experimental 6-tier fractional). Because each scheme ranks the
+// field independently, the top-20 SET — and therefore both the round columns
+// and the rows — can differ between them, so BOTH the header row and the tbody
+// are precomputed per scheme in Python and embedded here; the toggle just swaps
+// which is shown, with NO recomputation in JS. Every dynamic value was
+// html.escaped in Python, so assigning these strings to innerHTML is safe.
+// Standard is the default on load (matching the server-rendered markup).
+const MATRIX_HEADER = {matrix_header_json};
+const MATRIX_ROWS = {matrix_rows_json};
+
+const headRow = document.getElementById("matrix-head-row");
+const matrixBody = document.getElementById("matrix-body");
+
+// Apply a scheme: swap the header cells (round columns can differ per scheme),
+// the player rows (the top-20 set can differ per scheme), and the toggle's
+// active button. Everything is precomputed, so this is a pure innerHTML swap.
+function applyScheme(scheme) {{
+  if (!MATRIX_ROWS[scheme]) return;
+  if (headRow && MATRIX_HEADER[scheme]) {{ headRow.innerHTML = MATRIX_HEADER[scheme]; }}
+  if (matrixBody) {{ matrixBody.innerHTML = MATRIX_ROWS[scheme]; }}
+  const btns = document.querySelectorAll(".scheme-btn");
+  for (const b of btns) {{
+    if (b.getAttribute("data-scheme") === scheme) {{ b.classList.add("active"); }}
+    else {{ b.classList.remove("active"); }}
+  }}
+}}
+const schemeButtons = document.querySelectorAll(".scheme-btn");
+for (const b of schemeButtons) {{
+  b.addEventListener("click", function() {{ applyScheme(b.getAttribute("data-scheme")); }});
+}}
+
 // Staleness safeguard: this static page is regenerated by a weekly (~7-day)
 // cron with no live server to notice if it silently stops. Compare the embedded
 // generation timestamp against the viewer's clock and reveal the (initially
@@ -936,39 +1012,62 @@ _MATRIX_TEMPLATE = """<!doctype html>
 """
 
 
-def render_round_matrix(
-    leaderboard: pd.DataFrame,
-    round_votes: pd.DataFrame,
-    output_path: str,
-    season: int,
-) -> None:
-    """Render a top-20 x per-round vote matrix to a self-contained HTML file.
+def _cell_class(votes) -> str:
+    """Map a per-round vote value to its matrix cell CSS tier class.
 
-    Rows are the top-20 players in leaderboard order (season total descending);
-    columns are every round any top-20 player played (in real season order via
-    ``round_sort_key``) plus a final Total column showing each player's season
-    total from the leaderboard.
+    Standard (3-2-1) only ever produces the whole-number tiers v3/v2/v1/v0, so
+    it looks exactly as before. ESPN's fractional halves get intermediate tiers:
+    only the exact 3.0 keeps the strongest gold (v3); 2.5 -> v2h (lighter gold),
+    1.5 -> v1h (white minor-vote tier), 0.5 -> v0h (lightest/muted). ``>=``
+    thresholds keep this robust to float noise (e.g. 2.4999999).
+    """
+    v = float(votes)
+    if v >= 3.0:
+        return "v3"
+    if v >= 2.5:
+        return "v2h"
+    if v >= 2.0:
+        return "v2"
+    if v >= 1.5:
+        return "v1h"
+    if v >= 1.0:
+        return "v1"
+    if v > 0.0:
+        return "v0h"
+    return "v0"
+
+
+def _build_matrix_view(
+    leaderboard: pd.DataFrame, round_votes: pd.DataFrame, season: int
+):
+    """Precompute one scheme's matrix header + body HTML.
+
+    Rows are that scheme's OWN top-20 players in leaderboard order (season total
+    descending); columns are every round any of THOSE top-20 players played (in
+    real season order via ``round_sort_key``) plus a final Total column showing
+    each player's season total from that scheme's leaderboard. Because the two
+    schemes rank the field independently, both the round set and the player set
+    can differ between them — hence header + body are built per scheme.
 
     "Did not play" vs "played, scored 0" is distinguished directly from the
     ``round_votes`` structure: ``per_round_votes`` emits a row (with ``votes=0``
     where applicable) for every requested player who appeared in a match, so a
     MISSING (player, round) pair means the player did not play that round — shown
-    as a muted em-dash placeholder, distinct from a real ``0`` cell.
+    as a muted em-dash placeholder, distinct from a real ``0`` cell. This holds
+    identically under either scheme. Returns ``(header_html, rows_html)``.
     """
     top20 = leaderboard.head(20)
     top20_players = [str(row.player) for row in top20.itertuples()]
 
-    # Full set of rounds played by ANY top-20 player, in real season order.
-    # Sort by the RAW round value (round_sort_key) so ordering stays correct;
-    # the Opening-Round relabeling below is applied only to the displayed header.
     all_rounds = sorted(
         {str(rv.round) for rv in round_votes.itertuples()}, key=round_sort_key
     )
 
     # Lookup of votes by (player, round); presence of a key == the player played
-    # that round (votes may legitimately be 0).
+    # that round (votes may legitimately be 0). Kept as float so ESPN's
+    # fractional halves survive — Standard's integers format cleanly either way.
     votes_by_key = {
-        (str(rv.player), str(rv.round)): int(rv.votes)
+        (str(rv.player), str(rv.round)): float(rv.votes)
         for rv in round_votes.itertuples()
     }
     season_total = {
@@ -997,19 +1096,74 @@ def render_round_matrix(
         for rnd in all_rounds:
             if (player, rnd) in votes_by_key:
                 v = votes_by_key[(player, rnd)]
+                # {:g} shows Standard's integers as "3"/"0" and ESPN's halves as
+                # "2.5"/"0.5"; the tier class carries the visual emphasis.
                 cells.append(
-                    '<td class="cell v{v}">{v}</td>'.format(v=v)
+                    '<td class="cell {cls}">{v}</td>'.format(
+                        cls=_cell_class(v), v="{:g}".format(v)
+                    )
                 )
             else:
                 # No row for this (player, round) => did not play that round.
                 cells.append('<td class="cell dnp">—</td>')
         total = season_total.get(player, 0)
-        # Total is an integer discrete-vote tally; format cleanly whether it
-        # arrives as int or float.
+        # Total may be an int (Standard) or float (ESPN); format cleanly for both.
         total_display = "{:g}".format(total)
         cells.append('<td class="total">{t}</td>'.format(t=total_display))
         rows.append("            <tr>" + "".join(cells) + "</tr>")
     rows_html = "\n".join(rows)
+    return header_html, rows_html
+
+
+def render_round_matrix(
+    leaderboards: dict,
+    round_votes: dict,
+    output_path: str,
+    season: int,
+) -> None:
+    """Render the round-by-round matrix with a Standard/ESPN scoring toggle.
+
+    ``leaderboards`` maps scheme name -> that scheme's FULL scored leaderboard
+    DataFrame (``{"Standard": df, "ESPN": df}``), and ``round_votes`` maps scheme
+    name -> that scheme's ``per_round_votes`` DataFrame computed with the MATCHING
+    ``vote_assigner`` over that scheme's own top-20 players. Because each scheme
+    ranks the field independently, the two top-20 SETS (and thus the rows and the
+    round columns) can differ, so both schemes' header + body are precomputed here
+    and embedded as JSON; the page's toggle swaps between them client-side with no
+    recomputation. The initial server-rendered view is Standard (production 3-2-1);
+    ESPN is opt-in for comparison.
+    """
+    # Standard must always be present; fall back to it for ESPN if a caller omits
+    # ESPN so the page still renders (the toggle then shows identical data).
+    standard_lb = leaderboards[_STANDARD_SCHEME]
+    standard_rv = round_votes[_STANDARD_SCHEME]
+    scheme_leaderboards = {
+        _STANDARD_SCHEME: standard_lb,
+        _ESPN_SCHEME: leaderboards.get(_ESPN_SCHEME, standard_lb),
+    }
+    scheme_round_votes = {
+        _STANDARD_SCHEME: standard_rv,
+        _ESPN_SCHEME: round_votes.get(_ESPN_SCHEME, standard_rv),
+    }
+
+    header_by_scheme: dict[str, str] = {}
+    rows_by_scheme: dict[str, str] = {}
+    for name in _SCHEMES:
+        header_html, rows_html = _build_matrix_view(
+            scheme_leaderboards[name], scheme_round_votes[name], season
+        )
+        header_by_scheme[name] = header_html
+        rows_by_scheme[name] = rows_html
+
+    # json.dumps emits each const on a single line (newlines inside the HTML are
+    # escaped to \n) and safely escapes for the JS/JSON context.
+    matrix_header_json = json.dumps(header_by_scheme)
+    matrix_rows_json = json.dumps(rows_by_scheme)
+
+    # Initial server-rendered view is Standard's, so the page shows the production
+    # scheme with no JS; the toggle then swaps in ESPN's precomputed data on click.
+    header_html = header_by_scheme[_STANDARD_SCHEME]
+    rows_html = rows_by_scheme[_STANDARD_SCHEME]
 
     now = datetime.now(timezone.utc)
     timestamp = now.strftime("%Y-%m-%d %H:%M UTC")
@@ -1018,6 +1172,8 @@ def render_round_matrix(
     html_doc = _MATRIX_TEMPLATE.format(
         header=header_html,
         rows=rows_html,
+        matrix_header_json=matrix_header_json,
+        matrix_rows_json=matrix_rows_json,
         timestamp=timestamp,
         generated_at_iso=generated_at_iso,
     )

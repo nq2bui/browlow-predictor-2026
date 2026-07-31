@@ -76,6 +76,23 @@ def _std(leaderboard):
     return {"Standard": leaderboard, "ESPN": leaderboard}
 
 
+def _std_matrix(leaderboard, round_votes):
+    """Wrap a single (leaderboard, round_votes) pair as the two ``{Standard, ESPN}``
+    dicts ``render_round_matrix`` expects, giving ESPN the same data as Standard.
+
+    Toggle-specific tests pass genuinely different per-scheme frames instead.
+    """
+    return (
+        {"Standard": leaderboard, "ESPN": leaderboard},
+        {"Standard": round_votes, "ESPN": round_votes},
+    )
+
+
+def _matrix_rows(html):
+    """Parse ``const MATRIX_ROWS`` -> ``{scheme: rows_html_string}``."""
+    return _embedded_json(html, "const MATRIX_ROWS =")
+
+
 def test_render_leaderboard_scheme_toggle_embeds_both_and_defaults_standard(tmp_path):
     # Standard and ESPN deliberately produce DIFFERENT rankings AND vote numbers,
     # so we can prove the toggle swaps real data rather than duplicating one
@@ -286,7 +303,7 @@ def test_render_round_matrix_builds_ordered_player_round_grid(tmp_path):
     )
     output_path = tmp_path / "rounds.html"
 
-    render_round_matrix(leaderboard, round_votes, str(output_path), 2026)
+    render_round_matrix(*_std_matrix(leaderboard, round_votes), str(output_path), 2026)
 
     html = output_path.read_text()
 
@@ -345,7 +362,7 @@ def test_render_round_matrix_freezes_player_name_column(tmp_path):
     )
     output_path = tmp_path / "rounds.html"
 
-    render_round_matrix(leaderboard, round_votes, str(output_path), 2026)
+    render_round_matrix(*_std_matrix(leaderboard, round_votes), str(output_path), 2026)
     html = output_path.read_text()
 
     # The player-name header cell carries a dedicated class so the sticky rule
@@ -397,9 +414,80 @@ def test_render_round_matrix_total_matches_row_sum(tmp_path):
     )
     output_path = tmp_path / "rounds.html"
 
-    render_round_matrix(leaderboard, round_votes, str(output_path), 2026)
+    render_round_matrix(*_std_matrix(leaderboard, round_votes), str(output_path), 2026)
     html = output_path.read_text()
     assert 'class="total">6<' in html
+
+
+def test_render_round_matrix_scheme_toggle_embeds_both_and_defaults_standard(tmp_path):
+    # Standard and ESPN rank the field independently, so their top-20 SETS differ:
+    # PlayerX is in Standard's list but NOT ESPN's; PlayerZ is in ESPN's but NOT
+    # Standard's. PlayerA is shared but with different per-round values per scheme.
+    standard_lb = pd.DataFrame({
+        "player": ["PlayerA", "PlayerX"],
+        "team": ["Richmond", "Carlton"],
+        "predicted_season_votes": [6, 3],
+    })
+    espn_lb = pd.DataFrame({
+        "player": ["PlayerA", "PlayerZ"],
+        "team": ["Richmond", "Geelong"],
+        "predicted_season_votes": [5.5, 4.0],
+    })
+    standard_rv = pd.DataFrame(
+        [
+            {"player": "PlayerA", "round": "1", "votes": 3},
+            {"player": "PlayerX", "round": "1", "votes": 2},
+        ],
+        columns=["player", "round", "votes"],
+    )
+    # ESPN's fractional halves (2.5) must survive and get the intermediate tier.
+    espn_rv = pd.DataFrame(
+        [
+            {"player": "PlayerA", "round": "1", "votes": 3.0},
+            {"player": "PlayerZ", "round": "1", "votes": 2.5},
+        ],
+        columns=["player", "round", "votes"],
+    )
+    output_path = tmp_path / "rounds.html"
+
+    render_round_matrix(
+        {"Standard": standard_lb, "ESPN": espn_lb},
+        {"Standard": standard_rv, "ESPN": espn_rv},
+        str(output_path),
+        2026,
+    )
+    html = output_path.read_text()
+
+    # 1. A toggle control exists with a button per scheme, Standard active on load.
+    assert 'class="scheme-toggle"' in html
+    assert 'class="scheme-btn active" data-scheme="Standard"' in html
+    assert 'class="scheme-btn" data-scheme="ESPN"' in html  # ESPN NOT active
+
+    # 2. BOTH schemes' row data are embedded and genuinely differ.
+    rows = _matrix_rows(html)
+    assert set(rows.keys()) == {"Standard", "ESPN"}
+    assert rows["Standard"] != rows["ESPN"]
+
+    # 3. The top-20 SET differs: PlayerX only in Standard's rows, PlayerZ only in
+    #    ESPN's rows. Each player is shown ONLY under the scheme that ranks them.
+    assert "PlayerX" in rows["Standard"] and "PlayerX" not in rows["ESPN"]
+    assert "PlayerZ" in rows["ESPN"] and "PlayerZ" not in rows["Standard"]
+
+    # 4. The DEFAULT (server-rendered) body is Standard's: PlayerX is present in
+    #    the live tbody, ESPN-only PlayerZ is not (it lives only in embedded JSON).
+    body = html[html.index('id="matrix-body"'):html.index("</tbody>")]
+    assert "PlayerX" in body
+    assert "PlayerZ" not in body
+
+    # 5. ESPN's fractional 2.5 renders with the intermediate gold tier class and
+    #    its "2.5" value; Standard's whole-number 3 keeps the strongest v3 tier.
+    assert 'class="cell v2h">2.5<' in rows["ESPN"]
+    assert 'class="cell v3">3<' in rows["Standard"]
+
+    # 6. The applyScheme JS wiring + embedded per-scheme maps are present.
+    assert "function applyScheme" in html
+    assert "MATRIX_ROWS" in html
+    assert "MATRIX_HEADER" in html
 
 
 def test_render_leaderboard_omits_logo_for_unknown_team(tmp_path):
@@ -542,7 +630,7 @@ def test_render_round_matrix_embeds_staleness_check(tmp_path):
     )
     output_path = tmp_path / "rounds.html"
 
-    render_round_matrix(leaderboard, round_votes, str(output_path), 2026)
+    render_round_matrix(*_std_matrix(leaderboard, round_votes), str(output_path), 2026)
     html = output_path.read_text()
 
     m = re.search(r'data-generated-at="([^"]+)"', html)
