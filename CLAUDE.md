@@ -19,9 +19,45 @@ and the pre/post-2026 voting-rule caveat.
 
 - `brownlow/` — scraping, joining, modeling, and dashboard logic
 - `backfill_data.py` — one-time historical data scrape → `data/training_data.parquet`
-- `train_model.py` — trains and backtests the model → `model.txt`
+- `train_model.py` — trains and backtests the model (production-realistic
+  3-2-1 scoring, see Known Limitations) → `model.txt`
 - `weekly_update.py` — GitHub Actions cron entry point; scores the latest
-  round and regenerates `index.html`
+  round and regenerates `index.html` (leaderboard + team tally) and
+  `rounds.html` (round-by-round matrix), both with a Standard/ESPN toggle
+- `compare_vote_schemes.py` — read-only CLI: prints Standard vs ESPN
+  backtest hit rates side by side for the given `--data`/`--model`, no
+  retraining or file writes
+
+## Dashboard (index.html + rounds.html)
+
+Two static pages, dark "grass green + gold" theme (matching sibling
+project `afl-tipster`), team logos/colors from `brownlow/teams.py`. Built
+incrementally — see git history for the full sequence, this is the
+current state:
+
+- **`index.html`**: top-20 leaderboard (rank, player+logo, team, votes,
+  Sportsbet odds, implied %), sortable column headers, a model-vs-market
+  divergence marker (▲/▼) when the model's rank and the market's implied
+  rank diverge by 5+ positions, a team-vote-tally section (select any of
+  the 18 clubs, see every scored player for that team with >0 votes), a
+  Standard/ESPN scoring toggle (defaults to Standard), a staleness-warning
+  banner (client-side JS, appears if the page hasn't regenerated in >10
+  days — the weekly cron failed silently once early on; this catches a
+  repeat), and mobile-responsive horizontal scrolling on the main table.
+- **`rounds.html`**: every top-20 player's votes broken down round by
+  round (own top-20 per scheme) plus a season Total column, gold-highlighted
+  3-vote (or ESPN's graduated 2.5/1.5/0.5) cells, a sticky/frozen
+  player-name column so you don't lose track of the row while scrolling
+  through round columns, the same Standard/ESPN toggle and staleness
+  banner as the main page.
+- Round labels are AFL-official-numbering-aware: 2026 has an unnumbered
+  "Opening Round" before Round 1, but afltables' own `round` field just
+  calls it "Round 1" (shifting every subsequent round +1) — `display_round_label`
+  in `brownlow/dashboard.py` corrects this for display only (season-gated,
+  doesn't touch historical seasons or the underlying data/model).
+- No JS framework, no external CSS/fonts/CDN, no build step — every
+  interactive feature (sorting, toggles, filters, staleness check) is
+  inline vanilla JS operating on data precomputed and embedded server-side.
 
 ## Data Sources
 
@@ -222,17 +258,31 @@ full data source research and rationale.
   ~20-sample size, per the retrain caveats above).
 
 - **V2 experiment: ESPN-style fractional voting (3, 2.5, 2, 1.5, 1, 0.5 to
-  up to 6 players/match) does NOT beat the standard 3-2-1 scheme.** Added
-  `assign_espn_style_votes` (`brownlow/weekly.py`) and
-  `top20_hit_rate_with_scheme` (`brownlow/backtest.py`) as a parallel,
-  non-production comparison path, plus `compare_vote_schemes.py` to run
-  both schemes head-to-head against the same holdout seasons using the
-  same trained model (no retraining needed — this is purely a
-  scoring-conversion experiment, not a model change). Real result on the
-  27-feature model: 2024 — V1 85% vs V2 75% (V1 wins); 2025 — V1 80% vs
-  V2 80% (tied). **Production stays on the 3-2-1 scheme** — the finer
-  fractional granularity ESPN uses didn't translate into a better top-20
-  match against real historical outcomes on this data. `assign_espn_style_votes`
-  and the comparison harness are kept in the codebase for future
-  re-testing (e.g. once more 2026-specific data exists) but are not wired
-  into `weekly_update.py` or the dashboard.
+  up to 6 players/match) does NOT beat the standard 3-2-1 scheme on
+  backtest accuracy — but both are now live on the dashboard anyway, for
+  side-by-side comparison.** Added `assign_espn_style_votes`
+  (`brownlow/weekly.py`) and `top20_hit_rate_with_scheme`
+  (`brownlow/backtest.py`) as a pluggable scoring scheme, plus
+  `compare_vote_schemes.py` to run both schemes head-to-head against the
+  same holdout seasons using the same trained model (no retraining needed
+  — this is purely a scoring-conversion experiment, not a model change).
+  Real backtest result on the 27-feature model: 2024 — Standard 85% vs
+  ESPN 75% (Standard wins); 2025 — Standard 80% vs ESPN 80% (tied). Named
+  "Standard" (production 3-2-1) and "ESPN" (fractional) on the dashboard
+  (2026-07-31 naming sign-off). **Both schemes are wired into
+  `weekly_update.py` and rendered on both pages** (`index.html`'s
+  leaderboard + team-tally section, and `rounds.html`'s round-by-round
+  matrix), each with a Standard/ESPN toggle button defaulting to
+  Standard — a pure client-side vanilla-JS swap between two fully
+  precomputed datasets embedded server-side, nothing recomputed in the
+  browser. `accumulate_season_votes` and `per_round_votes`
+  (`brownlow/weekly.py`) both take a `vote_assigner` param (default
+  `assign_discrete_match_votes`) to support this. Because each scheme
+  ranks the field independently, the **top-20 player SET can differ
+  between Standard and ESPN** — the round matrix handles this by
+  precomputing each scheme's own top-20 list and round-by-round data
+  separately, not just re-scoring a fixed player list. Odds/Implied %
+  columns are NOT scheme-dependent and stay identical across both views.
+  Despite Standard winning the backtest, ESPN is kept live (not just in
+  the codebase) because the user explicitly wanted an ongoing visual
+  comparison, not just a one-off backtest verdict.

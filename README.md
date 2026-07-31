@@ -45,3 +45,14 @@ git push
 Without a committed `model.txt`, the weekly Action will fail with a
 file-not-found error on `load_model("model.txt")` once real 2026 match data
 exists.
+
+### Comparing vote-scoring schemes
+
+The dashboard ships two vote-scoring schemes with a live toggle: **Standard**
+(the official 3-2-1 votes per match) and **ESPN** (an experimental 6-tier
+fractional scheme — 3, 2.5, 2, 1.5, 1, 0.5 to up to 6 players per match). To
+re-run the backtest comparison between them (read-only, no retraining):
+
+```bash
+python compare_vote_schemes.py --data data/training_data.parquet --model model.txt
+```
