@@ -182,3 +182,47 @@ full data source research and rationale.
   signal for a tree model, so the explicit one-hot columns add only a small
   residual on top. Shipped as-is (decided 2026-07-30): the feature is
   well-motivated and genuinely non-zero, just not a strong lever on its own.
+
+- **Retrained on the 27-feature dataset (2026-07-31): the 8 new footywire
+  stats are genuinely useful, more so than position.** `metres_gained`
+  (1088.6 gain) ranks above `marks` and several already-trusted features;
+  `effective_disposals` (554.9), `disposal_efficiency` (497.2),
+  `centre_clearances` (497.2), `one_percenters` (425.4),
+  `uncontested_possessions` (398.4), and `marks_inside_50` (288.9) all
+  clear every position feature (55-97). Only `tackles_inside_50` (96.3)
+  lands in the same low range as position. `train_model.py`'s own
+  hit-rate metric moved to 45%/30% (2024/2025 holdouts, was 50%/25%) —
+  another small, likely-noisy swing at this sample size, consistent with
+  every retrain so far.
+
+- **`train_model.py`'s reported hit-rate understates real production
+  performance — discovered 2026-07-31 via the V2 experiment below.**
+  `top20_hit_rate` (what `train_model.py` prints) sums the model's RAW
+  continuous per-match scores directly, but the actual production
+  leaderboard (`accumulate_season_votes`) converts those scores to
+  discrete 3-2-1 votes per match FIRST (via `assign_discrete_match_votes`)
+  before summing. Measuring hit-rate the way production actually scores
+  (see `compare_vote_schemes.py` below) gives **85% (2024), 80% (2025)**
+  on the 27-feature model — dramatically higher than the 45%/30% the
+  training script reports. The discrete 3-2-1 conversion step itself is
+  doing real, non-trivial work as a denoising/regularizing step on top of
+  the raw model scores. **Fast-follow:** `train_model.py`'s own logged
+  metric should probably be updated to use the production-realistic
+  scoring path instead of raw scores, so the number it reports isn't
+  misleadingly pessimistic.
+
+- **V2 experiment: ESPN-style fractional voting (3, 2.5, 2, 1.5, 1, 0.5 to
+  up to 6 players/match) does NOT beat the standard 3-2-1 scheme.** Added
+  `assign_espn_style_votes` (`brownlow/weekly.py`) and
+  `top20_hit_rate_with_scheme` (`brownlow/backtest.py`) as a parallel,
+  non-production comparison path, plus `compare_vote_schemes.py` to run
+  both schemes head-to-head against the same holdout seasons using the
+  same trained model (no retraining needed — this is purely a
+  scoring-conversion experiment, not a model change). Real result on the
+  27-feature model: 2024 — V1 85% vs V2 75% (V1 wins); 2025 — V1 80% vs
+  V2 80% (tied). **Production stays on the 3-2-1 scheme** — the finer
+  fractional granularity ESPN uses didn't translate into a better top-20
+  match against real historical outcomes on this data. `assign_espn_style_votes`
+  and the comparison harness are kept in the codebase for future
+  re-testing (e.g. once more 2026-specific data exists) but are not wired
+  into `weekly_update.py` or the dashboard.
