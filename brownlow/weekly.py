@@ -59,14 +59,28 @@ def assign_espn_style_votes(model, match_df: pd.DataFrame) -> pd.Series:
     return votes
 
 
-def accumulate_season_votes(model, season_df: pd.DataFrame) -> pd.DataFrame:
+def accumulate_season_votes(
+    model, season_df: pd.DataFrame, vote_assigner=assign_discrete_match_votes
+) -> pd.DataFrame:
+    """Sum per-match votes into a season leaderboard, using a pluggable scheme.
+
+    ``vote_assigner`` is a callable with the same contract as
+    ``assign_discrete_match_votes`` / ``assign_espn_style_votes``: it takes
+    ``(model, match_df)`` for ONE match and returns a per-match vote ``pd.Series``
+    aligned to that match's index. It defaults to the production 3-2-1
+    (``assign_discrete_match_votes``) scheme, so existing callers are unchanged;
+    passing ``vote_assigner=assign_espn_style_votes`` produces an independent
+    ESPN-scheme leaderboard for side-by-side comparison. Columns and sort order
+    (``player, team, predicted_season_votes`` descending) are identical either way.
+    """
     df = season_df.copy()
 
-    # Assign discrete 3-2-1 votes per match, then sum across the season, so the
-    # published "predicted_season_votes" mirrors the real Brownlow tally (always
-    # a non-negative total in a realistic range) instead of summed raw scores.
+    # Assign per-match votes with the chosen scheme, then sum across the season, so
+    # the published "predicted_season_votes" mirrors a real Brownlow-style tally
+    # (always a non-negative total in a realistic range) instead of summed raw
+    # scores.
     per_match_votes = [
-        assign_discrete_match_votes(model, match_df)
+        vote_assigner(model, match_df)
         for _, match_df in df.groupby("match_id", sort=False)
     ]
     df["predicted_votes"] = pd.concat(per_match_votes)

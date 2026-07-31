@@ -181,6 +181,35 @@ _PAGE_TEMPLATE = """<!doctype html>
   }}
   .diverge-up {{ color: var(--gold-bright); }}
   .diverge-down {{ color: var(--muted); }}
+  /* Scoring-scheme toggle: a small segmented control ("Standard" | "ESPN") above
+     the leaderboard card. Standard (the production 3-2-1 scheme) is the default;
+     ESPN (the experimental 6-tier fractional scheme) is opt-in for side-by-side
+     comparison. Vanilla-JS driven — swaps the precomputed per-scheme row/tally
+     data embedded below. Styled in the existing dark/gold palette. */
+  .scheme-toggle {{
+    display: inline-flex;
+    margin: 0 0 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--panel);
+  }}
+  .scheme-btn {{
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    padding: 9px 22px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: inherit;
+    cursor: pointer;
+  }}
+  .scheme-btn + .scheme-btn {{ border-left: 1px solid var(--line); }}
+  .scheme-btn:hover {{ color: var(--white); }}
+  .scheme-btn.active {{ background: var(--gold); color: var(--grass); }}
+  .scheme-caption {{ color: var(--muted); font-size: 12px; margin: 0 0 16px; }}
   footer {{
     margin-top: 18px;
     color: var(--muted);
@@ -253,6 +282,11 @@ _PAGE_TEMPLATE = """<!doctype html>
   <p class="subtitle">Predicted top 20, updated after each round.</p>
   <p class="nav-link"><a href="rounds.html">View round-by-round matrix for all 20 &rarr;</a></p>
   <div id="stale-banner" class="stale-banner" role="alert" style="display: none;" data-generated-at="{generated_at_iso}">&#9888;&#65039; This leaderboard hasn't updated in over 10 days &mdash; the data may be stale</div>
+  <div class="scheme-toggle" role="group" aria-label="Vote scoring scheme">
+    <button type="button" class="scheme-btn active" data-scheme="Standard">Standard</button>
+    <button type="button" class="scheme-btn" data-scheme="ESPN">ESPN</button>
+  </div>
+  <p class="scheme-caption">Standard = official 3-2-1 votes. ESPN = experimental 6-tier fractional votes (comparison only).</p>
   <div class="card">
     <div class="table-scroll">
     <table id="leaderboard-table">
@@ -297,17 +331,38 @@ _PAGE_TEMPLATE = """<!doctype html>
   <footer>Last updated {timestamp}</footer>
 </div>
 <script>
-// Per-team season-vote tally. TEAM_VOTES maps each team to {{code, players}},
-// where players is the list of {{player, votes}} for that club's players with
-// MORE THAN 0 predicted votes, already sorted votes-descending. Player names
-// are html.escaped in Python before embedding, so concatenating them into
-// innerHTML below is safe; team is only ever assigned to element properties.
-const TEAM_VOTES = {team_votes_json};
+// ===== Precomputed per-scheme data, embedded server-side =====
+// The dashboard shows TWO scoring schemes with a toggle: "Standard" (the
+// production official 3-2-1 votes) and "ESPN" (an experimental 6-tier fractional
+// scheme), for side-by-side comparison. BOTH schemes' full row/tally data are
+// precomputed in Python and embedded here; the toggle just swaps which is shown,
+// with NO recomputation in JS. Standard is the default on load.
+//   LEADERBOARD_ROWS: scheme -> the complete top-20 <tbody> HTML for that scheme
+//     (rank, player, team, votes and the model-vs-market divergence marker are
+//     all per-scheme; every dynamic value was html.escaped in Python).
+//   TEAM_VOTES_BY_SCHEME: scheme -> team -> {{code, players}}, players being the
+//     list of {{player, votes}} (>0 votes, votes-descending, names html.escaped).
+//   DEFAULT_TEAM_BY_SCHEME: scheme -> the club of that scheme's #1-ranked player.
+const LEADERBOARD_ROWS = {leaderboard_rows_json};
+const TEAM_VOTES_BY_SCHEME = {team_votes_json};
+const DEFAULT_TEAM_BY_SCHEME = {default_team_json};
+
 const teamSelect = document.getElementById("team-select");
 const teamBody = document.getElementById("team-body");
 const teamLogo = document.getElementById("team-logo");
+const leaderboardTable = document.getElementById("leaderboard-table");
+const leaderboardBody = leaderboardTable ? leaderboardTable.querySelector("tbody") : null;
+
+// Which scheme is currently displayed. Starts on Standard, matching the server-
+// rendered initial markup and the button that carries the `active` class.
+let currentScheme = "Standard";
+
+// Team tally for the CURRENTLY-selected scheme + team. Player names were
+// html.escaped in Python before embedding, so concatenating them into innerHTML
+// is safe; team is only ever assigned to element properties.
 function renderTeam(team) {{
-  const info = TEAM_VOTES[team] || {{code: "", players: []}};
+  const teamData = TEAM_VOTES_BY_SCHEME[currentScheme] || {{}};
+  const info = teamData[team] || {{code: "", players: []}};
   if (info.code) {{
     teamLogo.src = "logos/" + info.code + ".png";
     teamLogo.alt = team + " logo";
@@ -327,52 +382,85 @@ function renderTeam(team) {{
   teamBody.innerHTML = out;
 }}
 teamSelect.addEventListener("change", function() {{ renderTeam(teamSelect.value); }});
-if (teamSelect.options.length > 0) {{ renderTeam(teamSelect.value); }}
 
 // Client-side sortable leaderboard columns. Sorts the visible rows by each
 // cell's raw data-sort-value (numeric or text) rather than the formatted
 // display text, so "$1.20" sorts as 1.20 and "83%" as 83. Rows with no
 // underlying value (e.g. players with no Sportsbet odds) always sink to the
 // bottom regardless of direction. Default (unsorted) order is model rank.
-(function() {{
-  const table = document.getElementById("leaderboard-table");
-  if (!table) return;
-  const tbody = table.querySelector("tbody");
-  let sortIndex = null;
-  let sortDir = 1;
-  function clearArrows() {{
-    const arrows = table.querySelectorAll("th.sortable .sort-arrow");
-    for (const a of arrows) {{ a.textContent = ""; }}
-  }}
-  function sortBy(th) {{
-    const index = parseInt(th.getAttribute("data-sort-index"), 10);
-    const type = th.getAttribute("data-sort-type");
-    if (sortIndex === index) {{ sortDir = -sortDir; }}
-    else {{ sortIndex = index; sortDir = 1; }}
-    const rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
-    rows.sort(function(a, b) {{
-      const av = a.children[index].getAttribute("data-sort-value");
-      const bv = b.children[index].getAttribute("data-sort-value");
-      const aMiss = av === null || av === "";
-      const bMiss = bv === null || bv === "";
-      if (aMiss && bMiss) return 0;
-      if (aMiss) return 1;
-      if (bMiss) return -1;
-      let cmp;
-      if (type === "number") {{ cmp = parseFloat(av) - parseFloat(bv); }}
-      else {{ cmp = av.localeCompare(bv); }}
-      return cmp * sortDir;
-    }});
-    for (const r of rows) {{ tbody.appendChild(r); }}
-    clearArrows();
-    const arrow = th.querySelector(".sort-arrow");
-    if (arrow) {{ arrow.textContent = sortDir === 1 ? "\\u25B2" : "\\u25BC"; }}
-  }}
-  const headers = table.querySelectorAll("th.sortable");
+// Sort state lives in this shared scope so a scheme swap (which rebuilds the
+// rows) can reset it back to model-rank order.
+let sortIndex = null;
+let sortDir = 1;
+function clearArrows() {{
+  const arrows = leaderboardTable ? leaderboardTable.querySelectorAll("th.sortable .sort-arrow") : [];
+  for (const a of arrows) {{ a.textContent = ""; }}
+}}
+function sortBy(th) {{
+  if (!leaderboardBody) return;
+  const index = parseInt(th.getAttribute("data-sort-index"), 10);
+  const type = th.getAttribute("data-sort-type");
+  if (sortIndex === index) {{ sortDir = -sortDir; }}
+  else {{ sortIndex = index; sortDir = 1; }}
+  const rows = Array.prototype.slice.call(leaderboardBody.querySelectorAll("tr"));
+  rows.sort(function(a, b) {{
+    const av = a.children[index].getAttribute("data-sort-value");
+    const bv = b.children[index].getAttribute("data-sort-value");
+    const aMiss = av === null || av === "";
+    const bMiss = bv === null || bv === "";
+    if (aMiss && bMiss) return 0;
+    if (aMiss) return 1;
+    if (bMiss) return -1;
+    let cmp;
+    if (type === "number") {{ cmp = parseFloat(av) - parseFloat(bv); }}
+    else {{ cmp = av.localeCompare(bv); }}
+    return cmp * sortDir;
+  }});
+  for (const r of rows) {{ leaderboardBody.appendChild(r); }}
+  clearArrows();
+  const arrow = th.querySelector(".sort-arrow");
+  if (arrow) {{ arrow.textContent = sortDir === 1 ? "\\u25B2" : "\\u25BC"; }}
+}}
+if (leaderboardTable) {{
+  const headers = leaderboardTable.querySelectorAll("th.sortable");
   for (const th of headers) {{
     th.addEventListener("click", function() {{ sortBy(th); }});
   }}
-}})();
+}}
+
+// Apply a scheme: swap the top-20 rows, the divergence markers (baked into those
+// rows), the team-tally data and the toggle's active button. Odds/Implied %
+// columns are scheme-independent and already baked identically into each
+// scheme's precomputed rows. Rebuilding the rows resets any active column sort
+// back to model-rank order, so the sort state + arrows are cleared here.
+function applyScheme(scheme) {{
+  if (!LEADERBOARD_ROWS[scheme]) return;
+  currentScheme = scheme;
+  if (leaderboardBody) {{ leaderboardBody.innerHTML = LEADERBOARD_ROWS[scheme]; }}
+  sortIndex = null;
+  sortDir = 1;
+  clearArrows();
+  const btns = document.querySelectorAll(".scheme-btn");
+  for (const b of btns) {{
+    if (b.getAttribute("data-scheme") === scheme) {{ b.classList.add("active"); }}
+    else {{ b.classList.remove("active"); }}
+  }}
+  // Keep the selected club if this scheme knows it; else fall back to this
+  // scheme's default team (the club of its #1-ranked player).
+  const teamData = TEAM_VOTES_BY_SCHEME[scheme] || {{}};
+  if (!(teamSelect.value in teamData) && DEFAULT_TEAM_BY_SCHEME[scheme]) {{
+    teamSelect.value = DEFAULT_TEAM_BY_SCHEME[scheme];
+  }}
+  renderTeam(teamSelect.value);
+}}
+const schemeButtons = document.querySelectorAll(".scheme-btn");
+for (const b of schemeButtons) {{
+  b.addEventListener("click", function() {{ applyScheme(b.getAttribute("data-scheme")); }});
+}}
+
+// Initial paint: Standard scheme (its default team is already selected in the
+// server-rendered <select>), so just render the team tally for that selection.
+if (teamSelect.options.length > 0) {{ renderTeam(teamSelect.value); }}
 
 // Staleness safeguard. This is a static page regenerated by a weekly (~7-day)
 // cron; there is no live server to notice if that cron silently stops. So we
@@ -416,27 +504,36 @@ _NO_ODDS = "—"
 _DIVERGENCE_THRESHOLD = 5
 
 
-def render_leaderboard(
-    leaderboard: pd.DataFrame,
-    odds: list[dict],
-    output_path: str,
-    season: int,
-) -> None:
-    # ``leaderboard`` is the FULL scored field (every player, not pre-sliced to
-    # 20). The top-20 table below uses .head(20); the team-tally section further
-    # down uses the whole thing so it can show every scored player per club.
-    # Index odds by the already-normalized "F. Surname" join key so a direct
-    # string match against the (identically normalized) leaderboard player works.
-    odds_by_player = {o["player"]: o["decimal_odds"] for o in odds}
+# Scheme labels and their fixed display order. "Standard" is the production
+# official 3-2-1 scheme (the default view); "ESPN" is the experimental 6-tier
+# fractional scheme, shown only for side-by-side comparison via the toggle.
+_STANDARD_SCHEME = "Standard"
+_ESPN_SCHEME = "ESPN"
+_SCHEMES = (_STANDARD_SCHEME, _ESPN_SCHEME)
 
+
+def _build_scheme_view(leaderboard: pd.DataFrame, odds_by_player: dict):
+    """Precompute one scheme's top-20 rows HTML + per-club tally + default team.
+
+    ``leaderboard`` is that scheme's FULL scored field (every player), already
+    sorted ``predicted_season_votes`` descending. Returns
+    ``(rows_html, players_by_team, default_team)`` where ``rows_html`` is the
+    complete top-20 ``<tbody>`` markup for this scheme (rank/player/team/votes and
+    the model-vs-market divergence marker are all computed against THIS scheme's
+    ranking), ``players_by_team`` maps club -> votes-descending list of
+    ``{player, votes}`` for its >0-vote players, and ``default_team`` is the club
+    of this scheme's #1-ranked player. Odds/Implied % come from the shared,
+    scheme-independent ``odds_by_player`` and are identical across schemes for a
+    given player (only which player sits in each row changes).
+    """
     top20 = leaderboard.head(20)
 
     # Market rank: rank ONLY the top-20 players who have real odds by decimal
     # odds ascending (lower odds = more likely = better rank). Ties break by
     # model position so the ordering is deterministic. Model rank is the row's
-    # 1-based position. A meaningful gap between the two ranks is flagged with a
-    # divergence marker. Players with no odds get no market rank (nothing to
-    # compare against).
+    # 1-based position under THIS scheme. A meaningful gap between the two ranks
+    # is flagged with a divergence marker; because the model ranking differs per
+    # scheme, the marker is recomputed per scheme here.
     odds_positions = [
         (i, odds_by_player[str(row.player)])
         for i, row in enumerate(top20.itertuples())
@@ -510,8 +607,8 @@ def render_leaderboard(
         )
     rows_html = "\n".join(rows)
 
-    # Team-tally section. Group the FULL scored field (not just the top 20) by
-    # club, keeping only players with MORE THAN 0 predicted votes, sorted
+    # Team-tally data. Group the FULL scored field (not just the top 20) by club,
+    # keeping only players with MORE THAN 0 predicted votes, sorted
     # votes-descending. leaderboard is already sorted votes-descending overall,
     # so each club's players arrive in that order; we sort again defensively.
     qualifying = leaderboard[leaderboard["predicted_season_votes"] > 0]
@@ -528,31 +625,85 @@ def render_leaderboard(
     for lst in players_by_team.values():
         lst.sort(key=lambda d: d["votes"], reverse=True)
 
-    # Canonical 18 AFL clubs (in TEAM_INFO order) form the dropdown, plus any
-    # other team actually present in the data (defensive: unknown/renamed clubs
-    # still show up rather than silently vanishing). Each team carries its logo
-    # code + qualifying players; teams with no vote-getters embed an empty list.
-    ordered_teams = list(TEAM_INFO.keys())
-    for team_name in players_by_team:
-        if team_name not in ordered_teams:
-            ordered_teams.append(team_name)
-
-    team_votes_data = {
-        team_name: {
-            "code": get_team_info(team_name)["code"],
-            "players": players_by_team.get(team_name, []),
-        }
-        for team_name in ordered_teams
-    }
-    # json.dumps safely escapes for the JS/JSON context; player names are already
-    # html.escaped above so they render correctly inside innerHTML.
-    team_votes_json = json.dumps(team_votes_data)
-
-    # Default the dropdown to the #1-ranked player's club so the section shows
-    # meaningful data on initial load rather than a blank/arbitrary table.
     default_team = (
         str(leaderboard.iloc[0]["team"]) if not leaderboard.empty else None
     )
+    return rows_html, players_by_team, default_team
+
+
+def render_leaderboard(
+    leaderboards: dict,
+    odds: list[dict],
+    output_path: str,
+    season: int,
+) -> None:
+    """Render the leaderboard page with a Standard/ESPN scoring-scheme toggle.
+
+    ``leaderboards`` is a dict mapping scheme name -> that scheme's FULL scored
+    leaderboard DataFrame, i.e. ``{"Standard": df, "ESPN": df}`` (each with the
+    usual ``player, team, predicted_season_votes`` columns, sorted descending).
+    BOTH schemes' top-20 rows, divergence markers and per-club team tallies are
+    precomputed here and embedded as JSON; the page's toggle swaps between them
+    client-side with no recomputation. The initial server-rendered view is
+    Standard (the production 3-2-1 scheme); ESPN is opt-in for comparison. Odds
+    and Implied % are scheme-independent and shared across both.
+    """
+    # Index odds by the already-normalized "F. Surname" join key so a direct
+    # string match against the (identically normalized) leaderboard player works.
+    odds_by_player = {o["player"]: o["decimal_odds"] for o in odds}
+
+    # Precompute each scheme's rows + tally. Standard must always be present;
+    # fall back to the Standard leaderboard for ESPN if a caller somehow omits it
+    # so the page still renders (the toggle then simply shows identical data).
+    standard_lb = leaderboards[_STANDARD_SCHEME]
+    scheme_leaderboards = {
+        _STANDARD_SCHEME: standard_lb,
+        _ESPN_SCHEME: leaderboards.get(_ESPN_SCHEME, standard_lb),
+    }
+
+    rows_by_scheme: dict[str, str] = {}
+    players_by_team_by_scheme: dict[str, dict] = {}
+    default_team_by_scheme: dict[str, str] = {}
+    for name in _SCHEMES:
+        rows_html, players_by_team, default_team = _build_scheme_view(
+            scheme_leaderboards[name], odds_by_player
+        )
+        rows_by_scheme[name] = rows_html
+        players_by_team_by_scheme[name] = players_by_team
+        default_team_by_scheme[name] = default_team
+
+    # Canonical 18 AFL clubs (in TEAM_INFO order) form the dropdown, plus any
+    # other team actually present in EITHER scheme's data (defensive: unknown/
+    # renamed clubs still show up rather than silently vanishing). The dropdown is
+    # a single static union; each scheme's tally map is built over this same union
+    # so the JS never dereferences an unknown team.
+    ordered_teams = list(TEAM_INFO.keys())
+    for name in _SCHEMES:
+        for team_name in players_by_team_by_scheme[name]:
+            if team_name not in ordered_teams:
+                ordered_teams.append(team_name)
+
+    team_votes_by_scheme = {
+        name: {
+            team_name: {
+                "code": get_team_info(team_name)["code"],
+                "players": players_by_team_by_scheme[name].get(team_name, []),
+            }
+            for team_name in ordered_teams
+        }
+        for name in _SCHEMES
+    }
+    # json.dumps safely escapes for the JS/JSON context; player names are already
+    # html.escaped above so they render correctly inside innerHTML.
+    team_votes_json = json.dumps(team_votes_by_scheme)
+    leaderboard_rows_json = json.dumps(rows_by_scheme)
+    default_team_json = json.dumps(default_team_by_scheme)
+
+    # Initial server-rendered view + dropdown selection are Standard's, so the
+    # page shows the production scheme with no JS and existing no-JS expectations
+    # (and tests) hold; the toggle then swaps in ESPN's precomputed data on click.
+    rows_html = rows_by_scheme[_STANDARD_SCHEME]
+    default_team = default_team_by_scheme[_STANDARD_SCHEME]
     team_options = "\n".join(
         '        <option value="{name}"{sel}>{name}</option>'.format(
             name=html.escape(team_name),
@@ -569,7 +720,9 @@ def render_leaderboard(
     html_doc = _PAGE_TEMPLATE.format(
         rows=rows_html,
         team_options=team_options,
+        leaderboard_rows_json=leaderboard_rows_json,
         team_votes_json=team_votes_json,
+        default_team_json=default_team_json,
         timestamp=timestamp,
         generated_at_iso=generated_at_iso,
     )

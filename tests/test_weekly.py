@@ -177,6 +177,41 @@ def test_accumulate_season_votes_returns_discrete_3_2_1_sums():
     assert list(leaderboard.columns) == ["player", "team", "predicted_season_votes"]
 
 
+def test_accumulate_season_votes_espn_scheme_differs_from_default():
+    # Same two matches / four players, but scored with the ESPN 6-tier fractional
+    # scheme (passed explicitly). ESPN awards 3/2.5/2/1.5/... down to 6 players,
+    # so with only 4 players every one of them scores every match: Star 3+3=6,
+    # Mid 2.5+2.5=5, Low 2+2=4, Fringe 1.5+1.5=3 -- crucially Fringe is NONZERO
+    # here, whereas under the default 3-2-1 scheme Fringe scores 0. This proves
+    # the vote_assigner parameter genuinely changes the totals.
+    rows = []
+    for match_num in range(2):
+        mid = f"m{match_num}"
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 40, "match_id": mid, "player": "Star", "team": "Rich"})
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 30, "match_id": mid, "player": "Mid", "team": "Carl"})
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 20, "match_id": mid, "player": "Low", "team": "Geel"})
+        rows.append({**{c: 0 for c in STAT_COLUMNS}, "kicks": 10, "match_id": mid, "player": "Fringe", "team": "Hawt"})
+    season_df = pd.DataFrame(rows)
+    scores = {40: 9.0, 30: 6.0, 20: 3.0, 10: 1.0}
+    model = _FakeModel(scores)
+
+    standard = accumulate_season_votes(model, season_df)
+    espn = accumulate_season_votes(
+        model, season_df, vote_assigner=assign_espn_style_votes
+    )
+
+    standard_by_player = dict(zip(standard["player"], standard["predicted_season_votes"]))
+    espn_by_player = dict(zip(espn["player"], espn["predicted_season_votes"]))
+
+    # Default (unchanged) 3-2-1 behaviour.
+    assert standard_by_player == {"Star": 6, "Mid": 4, "Low": 2, "Fringe": 0}
+    # ESPN fractional behaviour -- different, and Fringe is now nonzero.
+    assert espn_by_player == {"Star": 6.0, "Mid": 5.0, "Low": 4.0, "Fringe": 3.0}
+    assert espn_by_player != standard_by_player
+    assert list(espn.columns) == ["player", "team", "predicted_season_votes"]
+    assert espn["predicted_season_votes"].is_monotonic_decreasing
+
+
 def test_round_sort_key_orders_numeric_ascending_then_finals():
     # Convention: plain-integer rounds sort ascending by numeric value; finals
     # labels sort AFTER all numeric rounds, in the order QF, SF, PF, GF.

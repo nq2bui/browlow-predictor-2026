@@ -32,12 +32,115 @@ def test_display_round_label_non_opening_round_season_is_not_shifted():
     assert display_round_label("QF", 2015) == "QF"
 
 
-def _team_votes_blob(html):
-    """Extract and parse the embedded ``const TEAM_VOTES = {...};`` JSON blob."""
-    marker = "const TEAM_VOTES ="
+def _embedded_json(html, marker):
+    """Parse a single-line ``const <NAME> = {...};`` JSON blob by ``marker``.
+
+    Each embedded const is emitted on its own line by json.dumps (no newlines
+    inside), so the statement's terminating ``;`` is the final ``;`` on that line
+    -- robust even though the JSON value itself may contain ``;`` (e.g. inline
+    ``border-left-color: #FFD200;`` inside embedded row HTML).
+    """
     start = html.index(marker) + len(marker)
-    blob = html[start:html.index(";", start)].strip()
-    return json.loads(blob)
+    line = html[start:html.index("\n", start)]
+    blob = line.rstrip()
+    assert blob.endswith(";"), "expected the const statement to end with ';'"
+    return json.loads(blob[:-1].strip())
+
+
+def _schemes_team_votes(html):
+    """Parse ``const TEAM_VOTES_BY_SCHEME`` -> ``{scheme: {team: {code, players}}}``."""
+    return _embedded_json(html, "const TEAM_VOTES_BY_SCHEME =")
+
+
+def _team_votes_blob(html, scheme="Standard"):
+    """Convenience: one scheme's ``{team: {code, players}}`` map (default Standard)."""
+    return _schemes_team_votes(html)[scheme]
+
+
+def _leaderboard_rows(html):
+    """Parse ``const LEADERBOARD_ROWS`` -> ``{scheme: rows_html_string}``."""
+    return _embedded_json(html, "const LEADERBOARD_ROWS =")
+
+
+def _default_team_by_scheme(html):
+    """Parse the embedded ``const DEFAULT_TEAM_BY_SCHEME = {...};`` JSON blob."""
+    return _embedded_json(html, "const DEFAULT_TEAM_BY_SCHEME =")
+
+
+def _std(leaderboard):
+    """Wrap a single leaderboard as the ``{Standard, ESPN}`` dict render expects.
+
+    Most existing tests exercise only the default (Standard) view, so ESPN is
+    given the same data; toggle-specific tests pass genuinely different frames.
+    """
+    return {"Standard": leaderboard, "ESPN": leaderboard}
+
+
+def test_render_leaderboard_scheme_toggle_embeds_both_and_defaults_standard(tmp_path):
+    # Standard and ESPN deliberately produce DIFFERENT rankings AND vote numbers,
+    # so we can prove the toggle swaps real data rather than duplicating one
+    # scheme twice. Under Standard, PlayerA (Richmond) leads; under ESPN the order
+    # flips so PlayerC (Geelong) leads and every vote value differs (fractional).
+    standard = pd.DataFrame({
+        "player": ["PlayerA", "PlayerB", "PlayerC"],
+        "team": ["Richmond", "Carlton", "Geelong"],
+        "predicted_season_votes": [6.0, 4.0, 2.0],
+    })
+    espn = pd.DataFrame({
+        "player": ["PlayerC", "PlayerA", "PlayerB"],
+        "team": ["Geelong", "Richmond", "Carlton"],
+        "predicted_season_votes": [5.0, 4.5, 3.0],
+    })
+    output_path = tmp_path / "index.html"
+
+    render_leaderboard({"Standard": standard, "ESPN": espn}, [], str(output_path), 2026)
+    html = output_path.read_text()
+
+    # 1. A clearly-labelled toggle control exists, with a button per scheme.
+    assert 'class="scheme-toggle"' in html
+    assert 'data-scheme="Standard"' in html
+    assert 'data-scheme="ESPN"' in html
+    # ...and Standard is the pre-selected (active) button on load.
+    assert 'class="scheme-btn active" data-scheme="Standard"' in html
+    assert 'class="scheme-btn" data-scheme="ESPN"' in html  # ESPN NOT active
+
+    # 2. BOTH schemes' full row data are embedded, and they genuinely differ.
+    rows = _leaderboard_rows(html)
+    assert set(rows.keys()) == {"Standard", "ESPN"}
+    assert rows["Standard"] != rows["ESPN"]
+
+    # Standard rows: PlayerA first (rank 1), its 6.0 votes present; Geelong order
+    # is A, B, C.
+    assert rows["Standard"].index("PlayerA") < rows["Standard"].index("PlayerB") \
+        < rows["Standard"].index("PlayerC")
+    assert ">6.0<" in rows["Standard"]
+    # ESPN rows: PlayerC first, fractional 5.0 / 4.5 present, order flipped.
+    assert rows["ESPN"].index("PlayerC") < rows["ESPN"].index("PlayerA")
+    assert ">5.0<" in rows["ESPN"]
+    assert ">4.5<" in rows["ESPN"]
+
+    # 3. The DEFAULT (server-rendered) view is Standard, not ESPN: the exact
+    # Standard rows markup is present unescaped in the page body (the tbody),
+    # while ESPN's only lives escaped inside the embedded JSON.
+    assert rows["Standard"] in html
+    assert rows["ESPN"] not in html
+
+    # 4. Per-scheme team tallies differ for the same club/player.
+    team_data = _schemes_team_votes(html)
+    assert set(team_data.keys()) == {"Standard", "ESPN"}
+    assert team_data["Standard"]["Richmond"]["players"] == [{"player": "PlayerA", "votes": 6.0}]
+    assert team_data["ESPN"]["Richmond"]["players"] == [{"player": "PlayerA", "votes": 4.5}]
+    assert team_data["ESPN"]["Geelong"]["players"] == [{"player": "PlayerC", "votes": 5.0}]
+
+    # 5. Each scheme's default team is its own #1-ranked player's club.
+    defaults = _default_team_by_scheme(html)
+    assert defaults == {"Standard": "Richmond", "ESPN": "Geelong"}
+    # The server-rendered <select> defaults to the STANDARD scheme's team.
+    assert '<option value="Richmond" selected>' in html
+
+    # 6. The JS wiring for the toggle is present (applyScheme + the embedded maps).
+    assert "function applyScheme" in html
+    assert "LEADERBOARD_ROWS" in html
 
 
 def test_render_leaderboard_writes_top_20_table(tmp_path):
@@ -48,7 +151,7 @@ def test_render_leaderboard_writes_top_20_table(tmp_path):
     })
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, [], str(output_path), 2026)
+    render_leaderboard(_std(leaderboard), [], str(output_path), 2026)
 
     html = output_path.read_text()
     # The leaderboard TABLE shows only the top 20 (Player0..Player19 as rows);
@@ -80,7 +183,7 @@ def test_render_leaderboard_removes_round_by_round_section(tmp_path):
     })
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, [], str(output_path), 2026)
+    render_leaderboard(_std(leaderboard), [], str(output_path), 2026)
     html = output_path.read_text()
 
     assert "ROUND_VOTES" not in html
@@ -109,7 +212,7 @@ def test_render_leaderboard_team_tally(tmp_path):
     })
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, [], str(output_path), 2026)
+    render_leaderboard(_std(leaderboard), [], str(output_path), 2026)
     html = output_path.read_text()
 
     # A team <select> exists and lists every club present in the data...
@@ -307,7 +410,7 @@ def test_render_leaderboard_omits_logo_for_unknown_team(tmp_path):
     })
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, [], str(output_path), 2026)
+    render_leaderboard(_std(leaderboard), [], str(output_path), 2026)
 
     html = output_path.read_text()
     # Unknown team degrades gracefully in its leaderboard ROW: no broken logo
@@ -332,7 +435,7 @@ def test_render_leaderboard_shows_odds_columns_and_placeholder(tmp_path):
     ]
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, odds, str(output_path), 2026)
+    render_leaderboard(_std(leaderboard), odds, str(output_path), 2026)
 
     html = output_path.read_text()
     # New column headers present.
@@ -359,7 +462,7 @@ def test_render_leaderboard_has_sort_attributes_and_script(tmp_path):
     ]
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, odds, str(output_path), 2026)
+    render_leaderboard(_std(leaderboard), odds, str(output_path), 2026)
     html = output_path.read_text()
 
     # Sortable headers carry the column index + type metadata the JS reads.
@@ -398,7 +501,7 @@ def test_render_leaderboard_embeds_staleness_check(tmp_path):
     })
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, [], str(output_path), 2026)
+    render_leaderboard(_std(leaderboard), [], str(output_path), 2026)
     html = output_path.read_text()
 
     # 1. Generation timestamp embedded in a machine-readable, JS-parseable form:
@@ -476,7 +579,7 @@ def test_render_leaderboard_table_is_horizontally_scrollable(tmp_path):
     })
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, [], str(output_path), 2026)
+    render_leaderboard(_std(leaderboard), [], str(output_path), 2026)
     html = output_path.read_text()
 
     # The scroll mechanism itself: a class with overflow-x styling.
@@ -519,7 +622,7 @@ def test_render_leaderboard_divergence_indicator(tmp_path):
     ]
     output_path = tmp_path / "index.html"
 
-    render_leaderboard(leaderboard, odds, str(output_path), 2026)
+    render_leaderboard(_std(leaderboard), odds, str(output_path), 2026)
     html = output_path.read_text()
 
     # P1: model #1 vs market #7 (gap 6 >= 5) -> model likes them MORE -> up marker.

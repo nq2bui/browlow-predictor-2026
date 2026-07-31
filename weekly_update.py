@@ -13,7 +13,11 @@ from brownlow.afltables import (
 from brownlow.footywire import SEASON_MATCH_LIST_URL_TEMPLATE, MATCH_STATS_URL_TEMPLATE, list_season_match_ids
 from brownlow.dataset import assemble_match_records, add_position_features, build_position_lookup
 from brownlow.model import load_model
-from brownlow.weekly import accumulate_season_votes, per_round_votes
+from brownlow.weekly import (
+    accumulate_season_votes,
+    assign_espn_style_votes,
+    per_round_votes,
+)
 from brownlow.dashboard import render_leaderboard, render_round_matrix
 from brownlow.odds import fetch_odds_page_html, parse_brownlow_odds
 from brownlow.http import fetch_url
@@ -130,11 +134,18 @@ def main():
     season_df = add_position_features(season_df, position_lookup)
 
     model = load_model(MODEL_PATH)
+    # Two independent leaderboards from the same model/data: the production
+    # "Standard" 3-2-1 scheme (default) and the experimental "ESPN" 6-tier
+    # fractional scheme, so the dashboard can toggle between them for side-by-side
+    # comparison. Standard remains the production default.
     leaderboard = accumulate_season_votes(model, season_df)
-    # The round-by-round matrix (rounds.html) shows only the top 20; compute
-    # per-round detail for exactly those players (same head(20) convention) to
-    # keep it cheap. render_leaderboard no longer needs this -- it derives its
-    # team-tally section from the FULL leaderboard passed below.
+    leaderboard_espn = accumulate_season_votes(
+        model, season_df, vote_assigner=assign_espn_style_votes
+    )
+    # The round-by-round matrix (rounds.html) shows only the top 20 under the
+    # Standard scheme; compute per-round detail for exactly those players (same
+    # head(20) convention) to keep it cheap. render_leaderboard no longer needs
+    # this -- it derives its team-tally section from the FULL leaderboards below.
     top_20_players = leaderboard.head(20)["player"].tolist()
     round_votes = per_round_votes(model, season_df, top_20_players)
 
@@ -148,8 +159,17 @@ def main():
         logger.warning("could not fetch/parse Sportsbet Brownlow odds, continuing without them: %s", e)
         odds = []
 
-    render_leaderboard(leaderboard, odds, OUTPUT_PATH, CURRENT_SEASON)
-    logger.info("wrote updated leaderboard to %s (%d players)", OUTPUT_PATH, len(leaderboard))
+    render_leaderboard(
+        {"Standard": leaderboard, "ESPN": leaderboard_espn},
+        odds,
+        OUTPUT_PATH,
+        CURRENT_SEASON,
+    )
+    logger.info(
+        "wrote updated leaderboard to %s (%d players, Standard + ESPN schemes)",
+        OUTPUT_PATH,
+        len(leaderboard),
+    )
 
     # Second page: the same round_votes rendered as an all-20 round-by-round
     # matrix (reuses the round_votes DataFrame already computed above).
