@@ -209,7 +209,17 @@ full data source research and rationale.
   the raw model scores. **Fast-follow:** `train_model.py`'s own logged
   metric should probably be updated to use the production-realistic
   scoring path instead of raw scores, so the number it reports isn't
-  misleadingly pessimistic.
+  misleadingly pessimistic. **DONE (2026-07-31):** `train_model.py` now
+  logs the production-realistic hit rate — it calls
+  `top20_hit_rate_with_scheme(model, season_df, assign_discrete_match_votes)`
+  (the same discrete 3-2-1 conversion `accumulate_season_votes` uses) and
+  labels the line "3-2-1 production scoring". The old raw-score
+  `top20_hit_rate` is kept in `brownlow/backtest.py` (its docstring corrected)
+  as a baseline and for the per-player-sum aggregation regression test, but is
+  no longer on the training-report path. Verified on the identical fresh
+  holdout model: raw 45%/30% → 3-2-1 75%/80% (the shipped `model.txt`
+  production path is 85%/80%; the 2024 gap is fresh-retrain noise at this
+  ~20-sample size, per the retrain caveats above).
 
 - **V2 experiment: ESPN-style fractional voting (3, 2.5, 2, 1.5, 1, 0.5 to
   up to 6 players/match) does NOT beat the standard 3-2-1 scheme.** Added

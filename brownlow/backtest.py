@@ -6,11 +6,16 @@ from brownlow.model import predict_match_votes
 def top20_hit_rate(model, season_df: pd.DataFrame) -> float:
     """Top-20 backtest hit rate using SUMMED RAW per-match relevance scores.
 
-    This is the existing/production backtest metric (called by ``train_model.py``)
-    and is intentionally left unchanged: it sums the raw ``predict_match_votes``
+    This measures the RAW-score path only: it sums the raw ``predict_match_votes``
     LightGBM scores per player, ranks, and measures the top-20 overlap against the
-    real historical ``brownlow_votes`` top 20. For a version parameterized by a
-    discrete/fractional per-match vote scheme, see ``top20_hit_rate_with_scheme``.
+    real historical ``brownlow_votes`` top 20. It is NOT how the production
+    leaderboard scores (production first converts each match's scores to discrete
+    3-2-1 votes via ``assign_discrete_match_votes`` before summing), and it is no
+    longer what ``train_model.py`` reports -- that now uses
+    ``top20_hit_rate_with_scheme`` with the production 3-2-1 assigner. This raw
+    variant is retained as a baseline and for the per-player-sum aggregation
+    regression test; for the production/scheme-parameterized version see
+    ``top20_hit_rate_with_scheme``.
     """
     df = season_df.copy()
     df["predicted_votes"] = predict_match_votes(model, df)
