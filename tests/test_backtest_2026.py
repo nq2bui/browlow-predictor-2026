@@ -1,6 +1,6 @@
 import pandas as pd
 
-from backtest_2026 import build_comparison_table
+from backtest_2026 import build_comparison_table, actual_round_votes_for
 
 
 def _season_df():
@@ -61,3 +61,31 @@ def test_build_comparison_table_fills_team_for_every_row():
     table = build_comparison_table(_season_df(), _predicted_df())
     assert table["team"].isna().sum() == 0
     assert table.set_index("player").loc["F", "team"] == "Collingwood"
+
+
+def test_actual_round_votes_for_sums_real_votes_per_player_round():
+    season_df = pd.DataFrame([
+        {"player": "A", "round": "1", "brownlow_votes": 3},
+        {"player": "A", "round": "2", "brownlow_votes": 0},
+        {"player": "B", "round": "1", "brownlow_votes": 1},
+        # Player not in the requested list -- must be excluded entirely.
+        {"player": "C", "round": "1", "brownlow_votes": 3},
+    ])
+
+    result = actual_round_votes_for(season_df, ["A", "B"])
+
+    assert set(result["player"]) == {"A", "B"}
+    a_r1 = result[(result["player"] == "A") & (result["round"] == "1")]["votes"].iloc[0]
+    assert a_r1 == 3
+    # B did not play round 2 at all, so there must be no row for it (distinct
+    # from a real 0 -- the caller treats a missing key as "did not play").
+    assert result[(result["player"] == "B") & (result["round"] == "2")].empty
+
+
+def test_actual_round_votes_for_empty_when_no_requested_players_present():
+    season_df = pd.DataFrame([{"player": "X", "round": "1", "brownlow_votes": 3}])
+
+    result = actual_round_votes_for(season_df, ["A", "B"])
+
+    assert result.empty
+    assert list(result.columns) == ["player", "round", "votes"]

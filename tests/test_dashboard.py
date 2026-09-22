@@ -753,13 +753,19 @@ def _comparison_row(player, team, actual_rank, actual_votes, predicted_rank, pre
     }
 
 
+def _round_votes_row(player, round_, votes):
+    return {"player": player, "round": round_, "votes": votes}
+
+
 def test_render_season_review_writes_headline_hit_rate(tmp_path):
     comparison = pd.DataFrame([
         _comparison_row("A. One", "Richmond", 1, 30.0, 1, 28.0, True, True),
     ])
+    actual_rv = pd.DataFrame([_round_votes_row("A. One", "1", 3)])
+    predicted_rv = pd.DataFrame([_round_votes_row("A. One", "1", 3)])
     output_path = tmp_path / "season_review_2026.html"
 
-    render_season_review(comparison, 0.8, str(output_path), 2026)
+    render_season_review(comparison, actual_rv, predicted_rv, 0.8, str(output_path), 2026)
 
     html = output_path.read_text()
     assert "80%" in html
@@ -774,12 +780,22 @@ def test_render_season_review_marks_hits_and_misses(tmp_path):
         # Actual top 20 but the model never ranked it there (model missed them).
         _comparison_row("Missed Player", "Collingwood", 18, 12.0, 30, 4.0, True, False),
     ])
+    actual_rv = pd.DataFrame([
+        _round_votes_row("Hit Player", "1", 3),
+        _round_votes_row("Overrated Player", "1", 0),
+        _round_votes_row("Missed Player", "1", 3),
+    ])
+    predicted_rv = pd.DataFrame([
+        _round_votes_row("Hit Player", "1", 3),
+        _round_votes_row("Overrated Player", "1", 2),
+        _round_votes_row("Missed Player", "1", 0),
+    ])
     output_path = tmp_path / "season_review_2026.html"
 
-    render_season_review(comparison, 0.85, str(output_path), 2026)
+    render_season_review(comparison, actual_rv, predicted_rv, 0.85, str(output_path), 2026)
 
     html = output_path.read_text()
-    assert ">Hit Player<" in html or "Hit Player" in html
+    assert "Hit Player" in html
     assert "agree-hit" in html
     assert "agree-model-high" in html
     assert "agree-model-low" in html
@@ -787,14 +803,73 @@ def test_render_season_review_marks_hits_and_misses(tmp_path):
     assert "Missed Player" in html
 
 
-def test_render_season_review_shows_team_logo_and_color(tmp_path):
+def test_render_season_review_shows_team_logo(tmp_path):
     comparison = pd.DataFrame([
         _comparison_row("A. One", "Richmond", 1, 30.0, 1, 28.0, True, True),
     ])
+    actual_rv = pd.DataFrame([_round_votes_row("A. One", "1", 3)])
+    predicted_rv = pd.DataFrame([_round_votes_row("A. One", "1", 3)])
     output_path = tmp_path / "season_review_2026.html"
 
-    render_season_review(comparison, 1.0, str(output_path), 2026)
+    render_season_review(comparison, actual_rv, predicted_rv, 1.0, str(output_path), 2026)
 
     html = output_path.read_text()
     assert "logos/RIC.png" in html
-    assert "#FFD200" in html
+
+
+def test_render_season_review_cell_shows_actual_over_predicted(tmp_path):
+    # A round where the player won a real vote AND the model predicted a
+    # (different) vote: both numbers must render, actual as the bold/gold
+    # ".actual" span, predicted as the smaller muted ".predicted" span below.
+    comparison = pd.DataFrame([
+        _comparison_row("A. One", "Richmond", 1, 30.0, 1, 28.0, True, True),
+    ])
+    actual_rv = pd.DataFrame([_round_votes_row("A. One", "1", 3)])
+    predicted_rv = pd.DataFrame([_round_votes_row("A. One", "1", 1)])
+    output_path = tmp_path / "season_review_2026.html"
+
+    render_season_review(comparison, actual_rv, predicted_rv, 1.0, str(output_path), 2026)
+
+    html = output_path.read_text()
+    assert '<span class="actual">3</span>' in html
+    assert '<span class="predicted">1</span>' in html
+    assert "v3" in html  # tier class driven by the ACTUAL vote value
+
+
+def test_render_season_review_marks_did_not_play_rounds(tmp_path):
+    # Two players; A played rounds 1 and 2, B only round 1 -- round 2 must show
+    # a "did not play" dash for B, not a 0.
+    comparison = pd.DataFrame([
+        _comparison_row("A. One", "Richmond", 1, 10.0, 1, 10.0, True, True),
+        _comparison_row("B. Two", "Carlton", 2, 5.0, 2, 5.0, True, True),
+    ])
+    actual_rv = pd.DataFrame([
+        _round_votes_row("A. One", "1", 3),
+        _round_votes_row("A. One", "2", 0),
+        _round_votes_row("B. Two", "1", 1),
+    ])
+    predicted_rv = pd.DataFrame([
+        _round_votes_row("A. One", "1", 3),
+        _round_votes_row("A. One", "2", 0),
+        _round_votes_row("B. Two", "1", 1),
+    ])
+    output_path = tmp_path / "season_review_2026.html"
+
+    render_season_review(comparison, actual_rv, predicted_rv, 1.0, str(output_path), 2026)
+
+    html = output_path.read_text()
+    assert 'class="cell dnp"' in html
+
+
+def test_render_season_review_total_column_always_shows_both_numbers(tmp_path):
+    comparison = pd.DataFrame([
+        _comparison_row("A. One", "Richmond", 1, 47.0, 1, 50.0, True, True),
+    ])
+    actual_rv = pd.DataFrame([_round_votes_row("A. One", "1", 3)])
+    predicted_rv = pd.DataFrame([_round_votes_row("A. One", "1", 3)])
+    output_path = tmp_path / "season_review_2026.html"
+
+    render_season_review(comparison, actual_rv, predicted_rv, 1.0, str(output_path), 2026)
+
+    html = output_path.read_text()
+    assert '<td class="total"><span class="actual">47</span><span class="predicted">50</span></td>' in html

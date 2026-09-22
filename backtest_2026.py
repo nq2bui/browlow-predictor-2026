@@ -21,7 +21,7 @@ from backfill_data import backfill_seasons
 from brownlow.backtest import top20_hit_rate_with_scheme
 from brownlow.dashboard import render_season_review
 from brownlow.model import load_model
-from brownlow.weekly import accumulate_season_votes, assign_discrete_match_votes
+from brownlow.weekly import accumulate_season_votes, assign_discrete_match_votes, per_round_votes
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,25 @@ def build_comparison_table(season_df: pd.DataFrame, predicted: pd.DataFrame) -> 
     ]
 
 
+def actual_round_votes_for(season_df: pd.DataFrame, players: list) -> pd.DataFrame:
+    """Real per-round votes for ``players``, shaped like ``brownlow.weekly.per_round_votes``.
+
+    Unlike the predicted side (which needs the model to assign per-match votes),
+    the real votes are already in ``season_df["brownlow_votes"]`` -- this is a
+    straight groupby, no scoring involved.
+    """
+    player_set = set(players)
+    df = season_df[season_df["player"].isin(player_set)]
+    if df.empty:
+        return pd.DataFrame(columns=["player", "round", "votes"])
+    return (
+        df.groupby(["player", "round"])["brownlow_votes"]
+        .sum()
+        .reset_index()
+        .rename(columns={"brownlow_votes": "votes"})
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=str, default="model.txt")
@@ -140,7 +159,11 @@ def main():
     with pd.option_context("display.max_rows", None, "display.width", 120):
         print(table.to_string(index=False))
 
-    render_season_review(table, hit_rate, args.html_out, SEASON)
+    players = table["player"].tolist()
+    actual_rv = actual_round_votes_for(season_df, players)
+    predicted_rv = per_round_votes(model, season_df, players, vote_assigner=assign_discrete_match_votes)
+
+    render_season_review(table, actual_rv, predicted_rv, hit_rate, args.html_out, SEASON)
     logger.info("wrote season review page to %s", args.html_out)
 
 
