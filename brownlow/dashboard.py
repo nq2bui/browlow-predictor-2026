@@ -281,6 +281,7 @@ _PAGE_TEMPLATE = """<!doctype html>
   <h1>Brownlow <span class="accent">Predictor</span> 2026</h1>
   <p class="subtitle">Predicted top 20, updated after each round.</p>
   <p class="nav-link"><a href="rounds.html">View round-by-round matrix for all 20 &rarr;</a></p>
+  <p class="nav-link"><a href="season_review_2026.html">See predicted vs. actual once the season's Brownlow count is out &rarr;</a></p>
   <div id="stale-banner" class="stale-banner" role="alert" style="display: none;" data-generated-at="{generated_at_iso}">&#9888;&#65039; This leaderboard hasn't updated in over 10 days &mdash; the data may be stale</div>
   <div class="scheme-toggle" role="group" aria-label="Vote scoring scheme">
     <button type="button" class="scheme-btn active" data-scheme="Standard">Standard</button>
@@ -928,6 +929,7 @@ _MATRIX_TEMPLATE = """<!doctype html>
   <h1>Round-by-round <span class="accent">matrix</span></h1>
   <p class="subtitle">Every top-20 player's votes, round by round.</p>
   <p class="nav-link"><a href="index.html">&larr; Back to leaderboard</a></p>
+  <p class="nav-link"><a href="season_review_2026.html">See predicted vs. actual once the season's Brownlow count is out &rarr;</a></p>
   <div id="stale-banner" class="stale-banner" role="alert" style="display: none;" data-generated-at="{generated_at_iso}">&#9888;&#65039; This page hasn't updated in over 10 days &mdash; the data may be stale</div>
   <div class="scheme-toggle" role="group" aria-label="Vote scoring scheme">
     <button type="button" class="scheme-btn active" data-scheme="Standard">Standard</button>
