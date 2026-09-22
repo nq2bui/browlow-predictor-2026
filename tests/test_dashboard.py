@@ -8,6 +8,7 @@ from brownlow.dashboard import (
     display_round_label,
     render_leaderboard,
     render_round_matrix,
+    render_season_review,
 )
 
 
@@ -736,3 +737,64 @@ def _row_containing(html, needle):
     start = html.rindex("<tr>", 0, idx)
     end = html.index("</tr>", idx) + len("</tr>")
     return html[start:end]
+
+
+def _comparison_row(player, team, actual_rank, actual_votes, predicted_rank, predicted_votes,
+                     in_actual_top20, in_predicted_top20):
+    return {
+        "player": player,
+        "team": team,
+        "actual_rank": actual_rank,
+        "actual_votes": actual_votes,
+        "predicted_rank": predicted_rank,
+        "predicted_season_votes": predicted_votes,
+        "in_actual_top20": in_actual_top20,
+        "in_predicted_top20": in_predicted_top20,
+    }
+
+
+def test_render_season_review_writes_headline_hit_rate(tmp_path):
+    comparison = pd.DataFrame([
+        _comparison_row("A. One", "Richmond", 1, 30.0, 1, 28.0, True, True),
+    ])
+    output_path = tmp_path / "season_review_2026.html"
+
+    render_season_review(comparison, 0.8, str(output_path), 2026)
+
+    html = output_path.read_text()
+    assert "80%" in html
+    assert "2026 Season" in html
+
+
+def test_render_season_review_marks_hits_and_misses(tmp_path):
+    comparison = pd.DataFrame([
+        _comparison_row("Hit Player", "Richmond", 1, 30.0, 1, 28.0, True, True),
+        # Predicted top 20 but not actually in the real top 20 (model overrated).
+        _comparison_row("Overrated Player", "Carlton", 25, 2.0, 15, 18.0, False, True),
+        # Actual top 20 but the model never ranked it there (model missed them).
+        _comparison_row("Missed Player", "Collingwood", 18, 12.0, 30, 4.0, True, False),
+    ])
+    output_path = tmp_path / "season_review_2026.html"
+
+    render_season_review(comparison, 0.85, str(output_path), 2026)
+
+    html = output_path.read_text()
+    assert ">Hit Player<" in html or "Hit Player" in html
+    assert "agree-hit" in html
+    assert "agree-model-high" in html
+    assert "agree-model-low" in html
+    assert "Overrated Player" in html
+    assert "Missed Player" in html
+
+
+def test_render_season_review_shows_team_logo_and_color(tmp_path):
+    comparison = pd.DataFrame([
+        _comparison_row("A. One", "Richmond", 1, 30.0, 1, 28.0, True, True),
+    ])
+    output_path = tmp_path / "season_review_2026.html"
+
+    render_season_review(comparison, 1.0, str(output_path), 2026)
+
+    html = output_path.read_text()
+    assert "logos/RIC.png" in html
+    assert "#FFD200" in html
