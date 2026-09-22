@@ -293,7 +293,10 @@ def test_unmatched_footywire_player_is_logged(caplog):
         "<a name=t1></a>Richmond Match Statistics",
     ).replace(
         'title="Oliver Florent">O Florent</a>',
-        'title="Oliver Florent">S Bolton</a>',  # now matches afltables ("Richmond", "S. Bolton")
+        # title relabelled too, since the parser now prefers it over the visible
+        # cell text -- both must say "S Bolton" to match afltables ("Richmond",
+        # "S. Bolton").
+        'title="S Bolton">S Bolton</a>',
     )
 
     with caplog.at_level(logging.WARNING):

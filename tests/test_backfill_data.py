@@ -81,10 +81,16 @@ def test_backfill_seasons_builds_combined_dataframe():
 # never matches the "Richmond v Carlton" afltables match, so every join misses
 # and falls back to 0. Here we relabel Sydney -> Richmond and O Florent ->
 # S Bolton so the footywire row aligns with afltables' "Bolton, Shai"
-# (normalized to "S. Bolton") on both team AND normalized name.
+# (normalized to "S. Bolton") on both team AND normalized name. The whole
+# anchor tag is replaced (not just the visible text) so its title attribute
+# -- which the parser now prefers over the visible cell text -- says "S
+# Bolton" too, not the original "Oliver Florent".
 FOOTYWIRE_ADV_ALIGNED = FOOTYWIRE_ADV.replace(
     "Sydney Match Statistics", "Richmond Match Statistics"
-).replace(">O Florent<", ">S Bolton<")
+).replace(
+    '<a href="pp-carlton-blues--oliver-florent" title="Oliver Florent">O Florent</a>',
+    '<a href="pp-richmond-tigers--shai-bolton" title="Shai Bolton">S Bolton</a>',
+)
 
 
 def fake_fetch_aligned(url: str) -> str:
@@ -102,7 +108,10 @@ AFLTABLES_MATCH_BRISBANE = AFLTABLES_MATCH.replace("Richmond", "Brisbane Lions")
 FOOTYWIRE_MATCH_LIST_BRISBANE = FOOTYWIRE_MATCH_LIST.replace(">Richmond<", ">Brisbane<")
 FOOTYWIRE_ADV_BRISBANE = FOOTYWIRE_ADV.replace(
     "Sydney Match Statistics", "Brisbane Match Statistics"
-).replace(">O Florent<", ">S Bolton<")
+).replace(
+    '<a href="pp-carlton-blues--oliver-florent" title="Oliver Florent">O Florent</a>',
+    '<a href="pp-brisbane-lions--shai-bolton" title="Shai Bolton">S Bolton</a>',
+)
 
 
 def fake_fetch_brisbane_alias(url: str) -> str:

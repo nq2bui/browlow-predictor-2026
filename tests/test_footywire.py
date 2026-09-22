@@ -16,10 +16,19 @@ ADV_FIXTURE = Path("tests/fixtures/footywire_advanced_sample.html").read_text()
 TEAM_ROSTER_FIXTURE = Path("tests/fixtures/footywire_team_roster_sample.html").read_text()
 # Real footywire pattern: a substituted player's name carries a trailing arrow
 # marker directly appended with no separator -- U+2197 (↗, subbed ON) or U+2199
-# (↙, subbed OFF). We reproduce it by suffixing the arrow onto a real player row
-# in the base fixture, mirroring the exact live-page shape (e.g. "N Vlastuin↗").
-FOOTYWIRE_SUB_ARROW_FIXTURE_ON = ADV_FIXTURE.replace(">O Florent<", ">N Vlastuin↗<")
-FOOTYWIRE_SUB_ARROW_FIXTURE_OFF = ADV_FIXTURE.replace(">J Lloyd<", ">J Ross↙<")
+# (↙, subbed OFF). We reproduce it by swapping a real player row's whole anchor
+# tag for one with NO title attribute (mirroring a page where the substituted
+# player's title metadata isn't available), so parsing must fall back to the
+# visible, arrow-suffixed cell text -- exercising that fallback path directly
+# rather than the (now preferred) title-attribute path the other tests cover.
+FOOTYWIRE_SUB_ARROW_FIXTURE_ON = ADV_FIXTURE.replace(
+    '<a href="pp-carlton-blues--oliver-florent" title="Oliver Florent">O Florent</a>',
+    '<a href="pp-richmond-tigers--nick-vlastuin">N Vlastuin↗</a>',
+)
+FOOTYWIRE_SUB_ARROW_FIXTURE_OFF = ADV_FIXTURE.replace(
+    '<a href="pp-sydney-swans--jake-lloyd" title="Jake Lloyd">J Lloyd</a>',
+    '<a href="pp-carlton-blues--jordan-ross">J Ross↙</a>',
+)
 MATCH_LIST_FIXTURE = Path("tests/fixtures/footywire_match_list_sample.html").read_text()
 # The base match-list fixture plus two real "noise" rows (Change Password /
 # Update Settings account widgets) extracted from a real captured live page
@@ -68,7 +77,11 @@ def test_parse_advanced_stats_page():
     teams = {row["team"] for row in rows}
     assert teams == {"Sydney", "Geelong"}
 
-    florent = next(r for r in rows if r["player"] == "O Florent")
+    # The raw player name comes from the anchor's title attribute (footywire's
+    # own untruncated "First Last"), preferred over the visible cell text
+    # ("O Florent") which some pages abbreviate -- see
+    # test_parse_advanced_stats_page_prefers_title_over_truncated_visible_text.
+    florent = next(r for r in rows if r["player"] == "Oliver Florent")
     assert florent["team"] == "Sydney"
     assert florent["score_involvements"] == 7
     assert florent["intercepts"] == 2
@@ -84,7 +97,7 @@ def test_parse_advanced_stats_page():
     assert florent["metres_gained"] == 645
     assert florent["tackles_inside_50"] == 0
 
-    selwood = next(r for r in rows if r["player"] == "J Selwood")
+    selwood = next(r for r in rows if r["player"] == "Joel Selwood")
     assert selwood["team"] == "Geelong"
     assert selwood["score_involvements"] == 9
     assert selwood["intercepts"] == 7
@@ -112,15 +125,15 @@ def test_parse_advanced_stats_page_skips_unused_substitute_rows():
     rows = parse_advanced_stats_page(ADV_WITH_UNUSED_SUB_FIXTURE)
 
     players = {r["player"] for r in rows}
-    assert "C Brown" not in players  # Collingwood unused substitute
-    assert "R West" not in players  # Western Bulldogs unused substitute
+    assert "Callum Brown" not in players  # Collingwood unused substitute
+    assert "Rhylee West" not in players  # Western Bulldogs unused substitute
 
-    pendlebury = next(r for r in rows if r["player"] == "S Pendlebury")
+    pendlebury = next(r for r in rows if r["player"] == "Scott Pendlebury")
     assert pendlebury["team"] == "Collingwood"
     assert pendlebury["score_involvements"] == 7
     assert pendlebury["intercepts"] == 7
 
-    smith = next(r for r in rows if r["player"] == "B Smith")
+    smith = next(r for r in rows if r["player"] == "Bailey Smith")
     assert smith["team"] == "Western Bulldogs"
     assert smith["score_involvements"] == 7
     assert smith["intercepts"] == 5
@@ -154,6 +167,30 @@ def test_parse_advanced_stats_page_older_page_without_si_itc_columns():
     assert jack["team"] == "Sydney"
     assert jack["score_involvements"] == 0
     assert jack["intercepts"] == 0
+
+
+def test_parse_advanced_stats_page_prefers_title_over_truncated_visible_text():
+    # footywire TRUNCATES the visible cell text for a double-barrelled/
+    # hyphenated surname down to its last component plus a single-letter
+    # prefix -- confirmed live, e.g. "Luke Davies-Uniacke" renders as
+    # "L D-Uniacke" -- which never matches afltables' untruncated surname on
+    # the join key, silently losing that player's advanced stats every match.
+    # The anchor's own title attribute always carries the real, untruncated
+    # name, confirmed live for both truncated and ordinary names alike; the
+    # parser must prefer it.
+    fixture = ADV_FIXTURE.replace(
+        '<a href="pp-carlton-blues--oliver-florent" title="Oliver Florent">O Florent</a>',
+        '<a href="pp-north-melbourne-kangaroos--luke-davies-uniacke" '
+        'title="Luke Davies-Uniacke">L D-Uniacke</a>',
+    )
+    rows = parse_advanced_stats_page(fixture)
+    players = {r["player"] for r in rows}
+    assert "Luke Davies-Uniacke" in players  # untruncated, from title
+    assert "L D-Uniacke" not in players  # truncated visible text not used
+    duniacke = next(r for r in rows if r["player"] == "Luke Davies-Uniacke")
+    # Stats still parse correctly (from the O Florent row this replaced).
+    assert duniacke["score_involvements"] == 7
+    assert duniacke["intercepts"] == 2
 
 
 def test_parse_advanced_stats_page_strips_substitution_arrow_markers():

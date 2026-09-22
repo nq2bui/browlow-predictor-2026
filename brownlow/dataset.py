@@ -11,7 +11,7 @@ from brownlow.footywire import (
     TEAM_ROSTER_URL_TEMPLATE,
 )
 from brownlow.http import fetch_url
-from brownlow.names import normalize_player_name
+from brownlow.names import join_key, normalize_player_name
 from brownlow.teams import canonicalize_team_name, FOOTYWIRE_TEAM_SLUGS
 
 logger = logging.getLogger(__name__)
@@ -199,23 +199,33 @@ def assemble_match_records(
     afltables_rows = parse_match_page(afltables_html)
 
     footywire_lookup = {}
+    footywire_names = {}  # key -> readable normalized name, for the warning below only
     if footywire_html:
         for row in parse_advanced_stats_page(footywire_html):
             # footywire's team spelling can be an alias of afltables' (e.g.
             # "Brisbane" vs "Brisbane Lions"); canonicalize it so the join key
             # matches afltables' side, which already uses the canonical spelling.
-            key = (canonicalize_team_name(row["team"]), normalize_player_name(row["player"]))
+            # join_key further folds apostrophe/case spelling differences between
+            # the two sites (e.g. afltables "OSullivan, Finn" vs footywire "Finn
+            # O'Sullivan") that survive normalize_player_name -- it's used ONLY
+            # for this matching key, never for the stored/displayed player name.
+            footywire_name = normalize_player_name(row["player"])
+            key = (canonicalize_team_name(row["team"]), join_key(footywire_name))
             footywire_lookup[key] = row
+            footywire_names[key] = footywire_name
 
-    afltables_keys = {(row["team"], normalize_player_name(row["player"])) for row in afltables_rows}
+    afltables_keys = {(row["team"], join_key(normalize_player_name(row["player"]))) for row in afltables_rows}
     for key in footywire_lookup:
         if key not in afltables_keys:
-            logger.warning("footywire player %s (%s) not found in afltables match %s", key[1], key[0], match_id)
+            logger.warning(
+                "footywire player %s (%s) not found in afltables match %s",
+                footywire_names[key], key[0], match_id,
+            )
 
     records = []
     for row in afltables_rows:
         normalized_name = normalize_player_name(row["player"])
-        footywire_row = footywire_lookup.get((row["team"], normalized_name))
+        footywire_row = footywire_lookup.get((row["team"], join_key(normalized_name)))
 
         # Signed final-score margin from this player's team's perspective:
         # positive if their team won, negative if they lost. Always available
